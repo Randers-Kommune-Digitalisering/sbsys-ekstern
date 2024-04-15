@@ -1,5 +1,5 @@
-from project_name.base import NAME
+from signatur_ansatdata.base import NAME
 
 
 def test_base():
-    assert NAME == "project_name"
+    assert NAME == "signatur_ansatdata"
