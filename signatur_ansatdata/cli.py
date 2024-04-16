@@ -10,7 +10,6 @@ Be creative! do whatever you want!
 
 from signatur_ansatdata.base import hello_world, SBSYSClient
 
-
 def main():  # pragma: no cover
     """
     The main function executes on commands:
@@ -27,7 +26,7 @@ def main():  # pragma: no cover
         * List all available tasks
         * Run an application (Flask, FastAPI, Django, etc.)
     """
-    
+
     client = SBSYSClient(base_url="https://sbsysapi.randers.dk", api_key="")
     # Define your JSON data
     json_data = {
@@ -50,3 +49,4 @@ def main():  # pragma: no cover
     else:
         print("Failed to retrieve search results")
     hello_world()
+
