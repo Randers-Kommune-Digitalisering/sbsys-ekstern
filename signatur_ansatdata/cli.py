@@ -7,7 +7,7 @@ Be creative! do whatever you want!
 - Start a web application
 - Import things from your .base module
 """
-from signatur_ansatdata.base import hello_world, SBSYSClient  # pragma: no cover
+from signatur_ansatdata.base import hello_world, SBSYSClient
 
 
 def main():  # pragma: no cover

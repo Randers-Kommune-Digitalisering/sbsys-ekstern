@@ -38,13 +38,13 @@ class APIClient:
 
     def get(self, path):
         return self._make_request(requests.get, path)
-        
+
     def post(self, path, data=None):
         return self._make_request(requests.post, path, json=data)
-    
+
     def put(self, path, data=None):
         return self._make_request(requests.put, path, json=data)
-        
+
     def delete(self, path):
         return self._make_request(requests.delete, path)
 
@@ -58,7 +58,7 @@ class SBSYSClient:
     def search_cases(self, body):
         path = "api/sag/search"
         return self.api_client.post(path, data=body)
-    
+
     # journaliser fil
     def journalise_file_personalesag(self, query):
         path = "api/dokument/journaliser"
