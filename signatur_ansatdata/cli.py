@@ -49,3 +49,4 @@ def main():  # pragma: no cover
     else:
         print("Failed to retrieve search results")
     hello_world()
+
