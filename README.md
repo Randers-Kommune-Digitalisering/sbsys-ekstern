@@ -1,85 +1,48 @@
+# Python 3 Boiler Plate
 
-# Python Project Template
+Simple Python boiler plate project. Main features:
 
-A low dependency and really simple to start project template for Python Projects.
+* Main application with parameter parsing and logger (via decorator).
+* Dynamic tests via unit tests and test coverage.
+* Static tests via pycodestyle, pyflakes, and pyline.
+* Requirements management.
+* Basic make, .gitignore and other configuration files.
 
-See also 
-- [Flask-Project-Template](https://github.com/rochacbruno/flask-project-template/) for a full feature Flask project including database, API, admin interface, etc.
-- [FastAPI-Project-Template](https://github.com/rochacbruno/fastapi-project-template/) The base to start an openapi project featuring: SQLModel, Typer, FastAPI, JWT Token Auth, Interactive Shell, Management Commands.
+[![Build Status](https://github.com/alexanderwillner/python-boilerplate/workflows/Build-Test/badge.svg)](https://github.com/AlexanderWillner/python-boilerplate/actions) [![Build Status](https://travis-ci.org/AlexanderWillner/python-boilerplate.svg?branch=master)](https://travis-ci.org/AlexanderWillner/python-boilerplate) [![Coverage Status](https://coveralls.io/repos/github/AlexanderWillner/python-boilerplate/badge.svg?branch=master)](https://coveralls.io/github/AlexanderWillner/python-boilerplate?branch=master) [![Scrutinizer Code Quality](https://scrutinizer-ci.com/g/AlexanderWillner/python-boilerplate/badges/quality-score.png?b=master)](https://scrutinizer-ci.com/g/AlexanderWillner/python-boilerplate/?branch=master)
 
-### HOW TO USE THIS TEMPLATE
-
-> **DO NOT FORK** this is meant to be used from **[Use this template](https://github.com/rochacbruno/python-project-template/generate)** feature.
-
-1. Click on **[Use this template](https://github.com/rochacbruno/python-project-template/generate)**
-3. Give a name to your project  
-   (e.g. `my_awesome_project` recommendation is to use all lowercase and underscores separation for repo names.)
-3. Wait until the first run of CI finishes  
-   (Github Actions will process the template and commit to your new repo)
-4. If you want [codecov](https://about.codecov.io/sign-up/) Reports and Automatic Release to [PyPI](https://pypi.org)  
-  On the new repository `settings->secrets` add your `PYPI_API_TOKEN` and `CODECOV_TOKEN` (get the tokens on respective websites)
-4. Read the file [CONTRIBUTING.md](CONTRIBUTING.md)
-5. Then clone your new project and happy coding!
-
-> **NOTE**: **WAIT** until first CI run on github actions before cloning your new project.
-
-### What is included on this template?
-
-- 🖼️ Templates for starting multiple application types:
-  * **Basic low dependency** Python program (default) [use this template](https://github.com/rochacbruno/python-project-template/generate)
-  * **Flask** with database, admin interface, restapi and authentication [use this template](https://github.com/rochacbruno/flask-project-template/generate).
-  **or Run `make init` after cloning to generate a new project based on a template.**
-- 📦 A basic [setup.py](setup.py) file to provide installation, packaging and distribution for your project.  
-  Template uses setuptools because it's the de-facto standard for Python packages, you can run `make switch-to-poetry` later if you want.
-- 🤖 A [Makefile](Makefile) with the most useful commands to install, test, lint, format and release your project.
-- 📃 Documentation structure using [mkdocs](http://www.mkdocs.org)
-- 💬 Auto generation of change log using **gitchangelog** to keep a HISTORY.md file automatically based on your commit history on every release.
-- 🐋 A simple [Containerfile](Containerfile) to build a container image for your project.  
-  `Containerfile` is a more open standard for building container images than Dockerfile, you can use buildah or docker with this file.
-- 🧪 Testing structure using [pytest](https://docs.pytest.org/en/latest/)
-- ✅ Code linting using [flake8](https://flake8.pycqa.org/en/latest/)
-- 📊 Code coverage reports using [codecov](https://about.codecov.io/sign-up/)
-- 🛳️ Automatic release to [PyPI](https://pypi.org) using [twine](https://twine.readthedocs.io/en/latest/) and github actions.
-- 🎯 Entry points to execute your program using `python -m <signatur_ansatdata>` or `$ signatur_ansatdata` with basic CLI argument parsing.
-- 🔄 Continuous integration using [Github Actions](.github/workflows/) with jobs to lint, test and release your project on Linux, Mac and Windows environments.
-
-> Curious about architectural decisions on this template? read [ABOUT_THIS_TEMPLATE.md](ABOUT_THIS_TEMPLATE.md)  
-> If you want to contribute to this template please open an [issue](https://github.com/rochacbruno/python-project-template/issues) or fork and send a PULL REQUEST.
-
-[❤️ Sponsor this project](https://github.com/sponsors/rochacbruno/)
-
-<!--  DELETE THE LINES ABOVE THIS AND WRITE YOUR PROJECT README BELOW -->
-
----
-# signatur_ansatdata
-
-[![codecov](https://codecov.io/gh/Randers-Kommune-Digitalisering/signatur-ansatdata/branch/main/graph/badge.svg?token=signatur-ansatdata_token_here)](https://codecov.io/gh/Randers-Kommune-Digitalisering/signatur-ansatdata)
-[![CI](https://github.com/Randers-Kommune-Digitalisering/signatur-ansatdata/actions/workflows/main.yml/badge.svg)](https://github.com/Randers-Kommune-Digitalisering/signatur-ansatdata/actions/workflows/main.yml)
-
-Awesome signatur_ansatdata created by Randers-Kommune-Digitalisering
-
-## Install it from PyPI
+## Examples
 
 ```bash
-pip install signatur_ansatdata
-```
-
-## Usage
-
-```py
-from signatur_ansatdata import BaseClass
-from signatur_ansatdata import base_function
-
-BaseClass().base_method()
-base_function()
+$ make
+Some available commands:
+ * run          - Run code.
+ * test         - Run unit tests and test coverage.
+ * doc          - Document code (pydoc).
+ * clean        - Cleanup (e.g. pyc files).
+ * code-style   - Check code style (pycodestyle).
+ * code-lint    - Check code lints (pyflakes, pyline).
+ * code-count   - Count code lines (cloc).
+ * deps-install - Install dependencies (see requirements.txt).
+ * deps-update  - Update dependencies (via pur).
+ * feedback     - Create a GitHub issue.
 ```
 
 ```bash
-$ python -m signatur_ansatdata
-#or
-$ signatur_ansatdata
+$ make test
+[D 180728 04:10:10 hello:23] <function print_message at 0x107867aa0>
+Hello world!
+[I 180728 04:10:10 hello:47] []
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+OK
+Name                  Stmts   Miss  Cover
+-----------------------------------------
+src/__init__.py           0      0   100%
+src/hello.py             26      0   100%
+tests/__init__.py         0      0   100%
+tests/test_hello.py      12      0   100%
+-----------------------------------------
+TOTAL                    38      0   100%
 ```
-
-## Development
-
-Read the [CONTRIBUTING.md](CONTRIBUTING.md) file.
