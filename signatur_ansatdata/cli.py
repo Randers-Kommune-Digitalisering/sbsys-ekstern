@@ -8,6 +8,8 @@ Be creative! do whatever you want!
 - Import things from your .base module
 """
 
+from signatur_ansatdata.base import hello_world, SBSYSClient
+
 
 def main():  # pragma: no cover
     """
@@ -25,4 +27,26 @@ def main():  # pragma: no cover
         * List all available tasks
         * Run an application (Flask, FastAPI, Django, etc.)
     """
-    print("This will do something")
+    
+    client = SBSYSClient(base_url="https://sbsysapi.randers.dk", api_key="")
+    # Define your JSON data
+    json_data = {
+        "PrimaerPerson": {
+            "CprNummer": "200395-xxxx"
+        },
+        "SagsTyper": [
+            {
+                "Id": 5
+            }
+        ]
+    }
+
+    # Call the journalise_file_personalesag method with the JSON data
+    response = client.search_cases(json_data)
+
+    if response:
+        print("Search results:")
+        print(response)
+    else:
+        print("Failed to retrieve search results")
+    hello_world()
