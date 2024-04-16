@@ -1,48 +1,37 @@
-# Python 3 Boiler Plate
+# python-flask-docker
+Basic Python Flask app in Docker which prints the hostname and IP of the container
 
-Simple Python boiler plate project. Main features:
-
-* Main application with parameter parsing and logger (via decorator).
-* Dynamic tests via unit tests and test coverage.
-* Static tests via pycodestyle, pyflakes, and pyline.
-* Requirements management.
-* Basic make, .gitignore and other configuration files.
-
-[![Build Status](https://github.com/alexanderwillner/python-boilerplate/workflows/Build-Test/badge.svg)](https://github.com/AlexanderWillner/python-boilerplate/actions) [![Build Status](https://travis-ci.org/AlexanderWillner/python-boilerplate.svg?branch=master)](https://travis-ci.org/AlexanderWillner/python-boilerplate) [![Coverage Status](https://coveralls.io/repos/github/AlexanderWillner/python-boilerplate/badge.svg?branch=master)](https://coveralls.io/github/AlexanderWillner/python-boilerplate?branch=master) [![Scrutinizer Code Quality](https://scrutinizer-ci.com/g/AlexanderWillner/python-boilerplate/badges/quality-score.png?b=master)](https://scrutinizer-ci.com/g/AlexanderWillner/python-boilerplate/?branch=master)
-
-## Examples
-
-```bash
-$ make
-Some available commands:
- * run          - Run code.
- * test         - Run unit tests and test coverage.
- * doc          - Document code (pydoc).
- * clean        - Cleanup (e.g. pyc files).
- * code-style   - Check code style (pycodestyle).
- * code-lint    - Check code lints (pyflakes, pyline).
- * code-count   - Count code lines (cloc).
- * deps-install - Install dependencies (see requirements.txt).
- * deps-update  - Update dependencies (via pur).
- * feedback     - Create a GitHub issue.
+### Build application
+Build the Docker image manually by cloning the Git repo.
+```
+$ git clone https://github.com/lvthillo/python-flask-docker.git
+$ docker build -t lvthillo/python-flask-docker .
 ```
 
-```bash
-$ make test
-[D 180728 04:10:10 hello:23] <function print_message at 0x107867aa0>
-Hello world!
-[I 180728 04:10:10 hello:47] []
-.
-----------------------------------------------------------------------
-Ran 1 test in 0.001s
-
-OK
-Name                  Stmts   Miss  Cover
------------------------------------------
-src/__init__.py           0      0   100%
-src/hello.py             26      0   100%
-tests/__init__.py         0      0   100%
-tests/test_hello.py      12      0   100%
------------------------------------------
-TOTAL                    38      0   100%
+### Download precreated image
+You can also just download the existing image from [DockerHub](https://hub.docker.com/r/lvthillo/python-flask-docker/).
 ```
+docker pull lvthillo/python-flask-docker
+```
+
+### Run the container
+Create a container from the image.
+```
+$ docker run --name my-container -d -p 8080:8080 lvthillo/python-flask-docker
+```
+
+Now visit http://localhost:8080
+```
+ The hostname of the container is 6095273a4e9b and its IP is 172.17.0.2. 
+```
+
+### Verify the running container
+Verify by checking the container ip and hostname (ID):
+```
+$ docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' my-container
+172.17.0.2
+$ docker inspect -f '{{ .Config.Hostname }}' my-container
+6095273a4e9b
+```
+
+
