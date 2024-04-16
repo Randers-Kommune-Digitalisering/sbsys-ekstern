@@ -10,7 +10,6 @@ Be creative! do whatever you want!
 
 from signatur_ansatdata.base import hello_world, SBSYSClient
 
-
 def main():  # pragma: no cover
     """
     The main function executes on commands:
