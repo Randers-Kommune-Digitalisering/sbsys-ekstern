@@ -1,122 +1,86 @@
-.ONESHELL:
-ENV_PREFIX=$(shell python -c "if __import__('pathlib').Path('.venv/bin/pip').exists(): print('.venv/bin/')")
-USING_POETRY=$(shell grep "tool.poetry" pyproject.toml && echo "yes")
-
-.PHONY: help
-help:             ## Show the help.
-	@echo "Usage: make <target>"
-	@echo ""
-	@echo "Targets:"
-	@fgrep "##" Makefile | fgrep -v fgrep
+SRC_CORE=src
+SRC_TEST=tests
+SRC_RESOURCES=resources
+PYTHON=python3
+PYDOC=pydoc3
+PIP=pip3
 
 
-.PHONY: show
-show:             ## Show the current environment.
-	@echo "Current environment:"
-	@if [ "$(USING_POETRY)" ]; then poetry env info && exit; fi
-	@echo "Running using $(ENV_PREFIX)"
-	@$(ENV_PREFIX)python -V
-	@$(ENV_PREFIX)python -m site
+help: ## Print help for each target
+	$(info Things3 low-level Python API.)
+	$(info =============================)
+	$(info )
+	$(info Available commands:)
+	$(info )
+	@grep '^[[:alnum:]_-]*:.* ##' $(MAKEFILE_LIST) \
+		| sort | awk 'BEGIN {FS=":.* ## "}; {printf "%-25s %s\n", $$1, $$2};'
 
-.PHONY: install
-install:          ## Install the project in dev mode.
-	@if [ "$(USING_POETRY)" ]; then poetry install && exit; fi
-	@echo "Don't forget to run 'make virtualenv' if you got errors."
-	$(ENV_PREFIX)pip install -e .[test]
+run: ## Run the code
+	@$(PYTHON) $(SRC_CORE)/hello.py -f -n Foo test
 
-.PHONY: fmt
-fmt:              ## Format code using black & isort.
-	$(ENV_PREFIX)isort signatur_ansatdata/
-	$(ENV_PREFIX)black -l 79 signatur_ansatdata/
-	$(ENV_PREFIX)black -l 79 tests/
+test: ## Test the code
+	@type coverage >/dev/null 2>&1 || (echo "Run '$(PIP) install coverage' first." >&2 ; exit 1)
+	@coverage run --source . -m $(SRC_TEST).test_hello
+	@coverage report
 
-.PHONY: lint
-lint:             ## Run pep8, black, mypy linters.
-	$(ENV_PREFIX)flake8 signatur_ansatdata/
-	$(ENV_PREFIX)black -l 79 --check signatur_ansatdata/
-	$(ENV_PREFIX)black -l 79 --check tests/
-	$(ENV_PREFIX)mypy --ignore-missing-imports signatur_ansatdata/
+doc: ## Document the code
+	@$(PYDOC) src
 
-.PHONY: test
-test: lint        ## Run tests and generate coverage report.
-	$(ENV_PREFIX)pytest -v --cov-config .coveragerc --cov=signatur_ansatdata -l --tb=short --maxfail=1 tests/
-	$(ENV_PREFIX)coverage xml
-	$(ENV_PREFIX)coverage html
+clean: ## Cleanup
+	@rm -f $(SRC_CORE)/*.pyc
+	@rm -rf $(SRC_CORE)/__pycache__
+	@rm -f $(SRC_TEST)/*.pyc
+	@rm -rf $(SRC_TEST)/__pycache__
 
-.PHONY: watch
-watch:            ## Run tests on every change.
-	ls **/**.py | entr $(ENV_PREFIX)pytest -s -vvv -l --tb=long --maxfail=1 tests/
+auto-style: ## Style the code
+	@if type autopep8 >/dev/null 2>&1 ; then autopep8 -i -r $(SRC_CORE) ; \
+	 else echo "SKIPPED. Run '$(PIP) install autopep8' first." >&2 ; fi
 
-.PHONY: clean
-clean:            ## Clean unused files.
-	@find ./ -name '*.pyc' -exec rm -f {} \;
-	@find ./ -name '__pycache__' -exec rm -rf {} \;
-	@find ./ -name 'Thumbs.db' -exec rm -f {} \;
-	@find ./ -name '*~' -exec rm -f {} \;
-	@rm -rf .cache
-	@rm -rf .pytest_cache
-	@rm -rf .mypy_cache
-	@rm -rf build
-	@rm -rf dist
-	@rm -rf *.egg-info
-	@rm -rf htmlcov
-	@rm -rf .tox/
-	@rm -rf docs/_build
+code-style: ## Test the code style
+	@if type pycodestyle >/dev/null 2>&1 ; then pycodestyle --max-line-length=80 $(SRC_CORE) ; \
+	 else echo "SKIPPED. Run '$(PIP) install pycodestyle' first." >&2 ; fi
 
-.PHONY: virtualenv
-virtualenv:       ## Create a virtual environment.
-	@if [ "$(USING_POETRY)" ]; then poetry install && exit; fi
-	@echo "creating virtualenv ..."
-	@rm -rf .venv
-	@python3 -m venv .venv
-	@./.venv/bin/pip install -U pip
-	@./.venv/bin/pip install -e .[test]
-	@echo
-	@echo "!!! Please run 'source .venv/bin/activate' to enable the environment !!!"
+code-count: ## Count the lines of code
+	@if type cloc >/dev/null 2>&1 ; then cloc $(SRC_CORE) ; \
+	 else echo "SKIPPED. Run 'brew install cloc' first." >&2 ; fi
 
-.PHONY: release
-release:          ## Create a new tag for release.
-	@echo "WARNING: This operation will create s version tag and push to github"
-	@read -p "Version? (provide the next x.y.z semver) : " TAG
-	@echo "$${TAG}" > signatur_ansatdata/VERSION
-	@$(ENV_PREFIX)gitchangelog > HISTORY.md
-	@git add signatur_ansatdata/VERSION HISTORY.md
-	@git commit -m "release: version $${TAG} 🚀"
-	@echo "creating git tag : $${TAG}"
-	@git tag $${TAG}
-	@git push -u origin HEAD --tags
-	@echo "Github Actions will detect the new tag and release the new version."
+code-lint: ## Lint the code
+	@if type pyflakes >/dev/null 2>&1 ; then pyflakes $(SRC_CORE) ; \
+	 else echo "SKIPPED. Run '$(PIP) install pyflakes' first." >&2 ; fi
+	@if type pylint >/dev/null 2>&1 ; then pylint $(SRC_CORE) ; \
+	 else echo "SKIPPED. Run '$(PIP) install pylint' first." >&2 ; fi
+	@if type flake8 >/dev/null 2>&1 ; then flake8 --max-complexity 10 $(SRC_CORE) ; \
+	 else echo "SKIPPED. Run '$(PIP) install flake8' first." >&2 ; fi
+	@if type pyright >/dev/null 2>&1 ; then pyright $(SRC_CORE) ; \
+	 else echo "SKIPPED. Run 'npm install -f pyright' first." >&2 ; fi
+	@if type mypy >/dev/null 2>&1 ; then mypy --ignore-missing-imports $(SRC_CORE) ; \
+	 else echo "SKIPPED. Run '$(PIP) install mypy' first." >&2 ; fi
 
-.PHONY: docs
-docs:             ## Build the documentation.
-	@echo "building documentation ..."
-	@$(ENV_PREFIX)mkdocs build
-	URL="site/index.html"; xdg-open $$URL || sensible-browser $$URL || x-www-browser $$URL || gnome-open $$URL || open $$URL
+css-lint: ## Lint the CSS code
+	@if type csslint >/dev/null 2>&1 ; then csslint --format=compact $(SRC_RESOURCES)/*.css ; \
+	 else echo "SKIPPED. Run 'npm install -g csslint' first." >&2 ; fi
 
-.PHONY: switch-to-poetry
-switch-to-poetry: ## Switch to poetry package manager.
-	@echo "Switching to poetry ..."
-	@if ! poetry --version > /dev/null; then echo 'poetry is required, install from https://python-poetry.org/'; exit 1; fi
-	@rm -rf .venv
-	@poetry init --no-interaction --name=a_flask_test --author=rochacbruno
-	@echo "" >> pyproject.toml
-	@echo "[tool.poetry.scripts]" >> pyproject.toml
-	@echo "signatur_ansatdata = 'signatur_ansatdata.__main__:main'" >> pyproject.toml
-	@cat requirements.txt | while read in; do poetry add --no-interaction "$${in}"; done
-	@cat requirements-test.txt | while read in; do poetry add --no-interaction "$${in}" --dev; done
-	@poetry install --no-interaction
-	@mkdir -p .github/backup
-	@mv requirements* .github/backup
-	@mv setup.py .github/backup
-	@echo "You have switched to https://python-poetry.org/ package manager."
-	@echo "Please run 'poetry shell' or 'poetry run signatur_ansatdata'"
+js-lint: ## Lint the JavaScript code
+	@if type jslint >/dev/null 2>&1 ; then jslint $(SRC_RESOURCES)/*.js ; \
+	 else echo "SKIPPED. Run 'npm install -g jslint' first." >&2 ; fi
 
-.PHONY: init
-init:             ## Initialize the project based on an application template.
-	@./.github/init.sh
+html-lint: ## Lint the HTML code
+	@if type tidy >/dev/null 2>&1 ; then tidy -qe $(SRC_RESOURCES)/*.html ; \
+	 else echo "SKIPPED. Run 'brew install tidy' first." >&2 ; fi
 
+lint: code-style code-lint css-lint js-lint html-lint ## Run all linters
 
-# This project has been generated from rochacbruno/python-project-template
-# __author__ = 'rochacbruno'
-# __repo__ = https://github.com/rochacbruno/python-project-template
-# __sponsor__ = https://github.com/sponsors/rochacbruno/
+deps-update: ## Update the dependencies
+	@if type pur >/dev/null 2>&1 ; then pur -r requirements.txt ; \
+	 else echo "SKIPPED. Run '$(PIP) install pur' first." >&2 ; fi
+
+deps-install: ## Install the dependencies
+	@type $(PIP) >/dev/null 2>&1 || (echo "Run 'curl https://bootstrap.pypa.io/get-pip.py|sudo python3' first." >&2 ; exit 1)
+	@$(PIP) install -r requirements.txt
+
+deps-create: ## Create the dependencies
+	@if type pipreqs >/dev/null 2>&1 ; then pipreqs --use-local --force . ; \
+	 else echo "SKIPPED. Run '$(PIP) install pipreqs' first." >&2 ; fi
+
+feedback: ## Provide feedback
+	@open https://github.com/AlexanderWillner/python-boilerplate/issues
