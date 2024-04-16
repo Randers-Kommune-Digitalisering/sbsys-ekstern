@@ -14,6 +14,7 @@ and then choose `flask` as template.
 """
 import requests
 
+
 # Håndtering af http request
 class APIClient:
     def __init__(self, base_url, api_key):
@@ -47,6 +48,7 @@ class APIClient:
     def delete(self, path):
         return self._make_request(requests.delete, path)
 
+
 # Samling af sbsys requests
 class SBSYSClient:
     def __init__(self, base_url, api_key):
@@ -62,5 +64,6 @@ class SBSYSClient:
         path = "api/dokument/journaliser"
         return self.api_client.post(path, data={"query": query})
 
+
 def hello_world():
-    print("Hello, World!") 
+    print("Hello, World!")
