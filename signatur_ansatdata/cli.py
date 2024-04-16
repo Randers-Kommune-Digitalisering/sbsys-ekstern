@@ -9,6 +9,7 @@ Be creative! do whatever you want!
 """
 from signatur_ansatdata.base import hello_world, SBSYSClient  # pragma: no cover
 
+
 def main():  # pragma: no cover
     """
     The main function executes on commands:
@@ -33,7 +34,7 @@ def main():  # pragma: no cover
         },
         "SagsTyper": [
             {
-            "Id": 5
+                "Id": 5
             }
         ]
     }
