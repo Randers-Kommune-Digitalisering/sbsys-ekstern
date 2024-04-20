@@ -26,7 +26,7 @@ def sbsys_journaliser_fil():
 
     # Find newest personalesag based on CPR from request
     cpr = request.json.get('cpr')
-    sbsys = SBSYSOperations(sbsys_url, token)
+    sbsys = SBSYSOperations()
     sag = sbsys.find_newest_personalesag(cpr)
     
     # Check if sag is None
@@ -38,6 +38,10 @@ def sbsys_journaliser_fil():
     binary_data = base64.b64decode(fil)
 
     response = sbsys.journalise_file(sag, binary_data)
+    # Check if sag is None
+    if response is None:
+        return jsonify({"error": "Failed to journalise file, try again"}), 500
+
     print(response)
 
     # TODO journaliser fil fra request på sagen fra find_newest_personalesag

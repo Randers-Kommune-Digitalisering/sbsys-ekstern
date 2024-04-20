@@ -1,15 +1,16 @@
 from utils import SBSYSClient
 
-class SBSYSOperations:
-    def __init__(self, base_url, api_key):
-        self.client = SBSYSClient(base_url=base_url, api_key=api_key)
 
-    def find_newest_personalesag(self, data):
+class SBSYSOperations:
+    def __init__(self):
+        self.client = SBSYSClient()
+
+    def find_newest_personalesag(self, cpr):
         
         # Define your JSON data
         json_data = {
             "PrimaerPerson": {
-                "CprNummer": data
+                "CprNummer": cpr
             },
             "SagsTyper": [
                 {
@@ -32,17 +33,18 @@ class SBSYSOperations:
             return None
 
     def journalise_file(self, sag, file):
-        sagID = sag['Id']
+        sag_id = sag['Id']
         # Call the journalise_file_personalesag method with the JSON data
         json_data = {
-            "json": '{"SagID": ' + str(sagID) + ',"OmfattetAfAktindsigt": true,"DokumentNavn": "Ansættelses Data"}'
+            "json": f'{{"SagID": {sag_id}, "OmfattetAfAktindsigt": true, "DokumentNavn": "Ansættelses Data"}}'
         }
+        print("json_data: " + str(json_data))
 
         # Prepare the files parameter as a dictionary
         files = {'file': file}
 
         # Call the journalise_file_personalesag method and capture the response
-        response = self.client.journalise_file_personalesag(sag, json_data, files)
+        response = self.client.journalise_file_personalesag(json_data, files)
 
         # Check if the response is received
         if response:
