@@ -1,4 +1,8 @@
-import requests, base64, json, time
+import requests, base64, os, time
+from dotenv import load_dotenv
+
+
+load_dotenv()
 
 # Håndtering af http request
 class APIClient:
@@ -6,9 +10,9 @@ class APIClient:
         self.sbsys_url = "https://sbsysapitest.randers.dk"
         self.sbsip_url = "https://sbsip-web-test01.randers.dk:8543"
         self.client_id = "randers-udvikling-klient"
-        self.client_secret = "ada62743-4120-4b48-bd91-10ec5b7bc907"
+        self.client_secret = os.environ['SBSYS_CLIENT_SECRET']
         self.username = "Personalesager"
-        self.password = "Randers1234"
+        self.password = os.environ['SBSYS_PASSWORD']
         self.access_token = None
         self.token_expiry = None
 
