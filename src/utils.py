@@ -86,10 +86,14 @@ class SBSYSClient:
         path = "api/sag/search"
         return self.api_client.post(path, data=body)
 
-    # journaliser fil
-    def journalise_file_personalesag(self, data, files):
+    def get_sag_delforloeb(self, sag):
+        path = "api/sag/" + str(sag["Id"]) + "/delforloeb"
+        return self.api_client.get(path)
 
-        path = "api/dokument/journaliser/" + "421"
+    # journaliser fil
+    def journalise_file_personalesag(self, data, files, delforloeb_id):
+
+        path = "api/dokument/journaliser/" + str(delforloeb_id)
         return self.api_client.post_upload(path, data=data, files=files)
     
 # Convert a base64 encoded string to file
