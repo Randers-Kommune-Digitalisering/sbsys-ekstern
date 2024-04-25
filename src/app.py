@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, request
+from healthcheck import HealthCheck
 from request_validation import validate_request_journaliser_fil
 from sbsys_operations import SBSYSOperations
 import requests, base64, os
@@ -6,6 +7,9 @@ import requests, base64, os
 # docker build -t signatur-ansatdata .
 # docker run -d -p 8080:8080 signatur-ansatdata
 app = Flask(__name__)
+
+health = HealthCheck()
+app.add_url_rule("/healthz", "healthcheck", view_func=lambda: health.run())
 
 @app.route('/api/journaliser/fil', methods=['POST'])
 def sbsys_journaliser_fil():
