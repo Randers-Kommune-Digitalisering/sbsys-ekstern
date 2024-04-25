@@ -43,7 +43,6 @@ class AuthorizationHelper:
         token_info = self.keycloak_openid.introspect(access_token)
         if token_info['active']:
             if self.client_id in token_info['resource_access']:
-                print(token_info['resource_access'][self.client_id]['roles'])
                 return role in token_info['resource_access'][self.client_id]['roles']
         return False
 
