@@ -1,18 +1,15 @@
-import requests, base64, os, time
-from dotenv import load_dotenv
+import requests, base64, time
 
-
-load_dotenv()
-
+from config import SBSYS_URL, SBSIP_URL, SBSYS_CLIENT_ID, SBSYS_CLIENT_SECRET, SBSYS_USERNAME, SBSYS_PASSWORD
 # Håndtering af http request
 class APIClient:
-    def __init__(self):
-        self.sbsys_url = "https://sbsysapitest.randers.dk"
-        self.sbsip_url = "https://sbsip-web-test01.randers.dk:8543"
-        self.client_id = "randers-udvikling-klient"
-        self.client_secret = os.environ['SBSYS_CLIENT_SECRET']
-        self.username = "Personalesager"
-        self.password = os.environ['SBSYS_PASSWORD']
+    def __init__(self, sbsys_url, sbsip_url, client_id, client_secret, username, password):
+        self.sbsys_url = sbsys_url
+        self.sbsip_url = sbsip_url
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.username = username
+        self.password = password
         self.access_token = None
         self.token_expiry = None
 
@@ -83,7 +80,7 @@ class APIClient:
 # Samling af sbsys requests
 class SBSYSClient:
     def __init__(self):
-        self.api_client = APIClient()
+        self.api_client = APIClient(SBSYS_URL, SBSIP_URL, SBSYS_CLIENT_ID, SBSYS_CLIENT_SECRET, SBSYS_USERNAME, SBSYS_PASSWORD)
 
     # søg efter sager
     def search_cases(self, body):
