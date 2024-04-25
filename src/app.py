@@ -1,17 +1,59 @@
-from flask import Flask, jsonify, request
+import base64
+import json
+
+from flask import Flask, Response, jsonify, request
 from healthcheck import HealthCheck
+
 from request_validation import validate_request_journaliser_fil
 from sbsys_operations import SBSYSOperations
-import requests, base64, os
+from openid_integration import AuthorizationHelper
 
-# docker build -t signatur-ansatdata .
-# docker run -d -p 8080:8080 signatur-ansatdata
+from config import DEBUG, KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID, KEYCLOAK_CLIENT_SECRET, ADD_FILE_ROLE
+
+
 app = Flask(__name__)
-
 health = HealthCheck()
+ah = AuthorizationHelper(KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID, KEYCLOAK_CLIENT_SECRET)
+
 app.add_url_rule("/healthz", "healthcheck", view_func=lambda: health.run())
 
+
+@app.route('/api/token', methods=["POST"])
+def token():
+    if request.is_json and type(request.json) == dict:
+        username = request.json.get('username', None)
+        password = request.json.get('password', None)
+        status, res = ah.get_token(username, password)
+    else:
+        status = 400
+        res = json.dumps({"error": "invalid_content", "error_description": "Payload is not json"})
+    return Response(res, status=status, mimetype='application/json')
+
+
+@app.route('/api/refreshtoken', methods=["POST"])
+def refesh_token():
+    if request.is_json and type(request.json) == dict:
+        token = request.json.get('refreshtoken', None)
+        status, res = ah.refresh_token(token)
+    else:
+        status = 400
+        res = json.dumps({"error": "invalid_content", "error_description": "Payload is not json"})
+    return Response(res, status=status, mimetype='application/json')
+
+
+@app.route('/api/logout', methods=["POST"])
+def logout():
+    if request.is_json and type(request.json) == dict:
+        token = request.json.get('refreshtoken', None)
+        status, res = ah.logout(token)
+    else:
+        status = 400
+        res = json.dumps({"error": "invalid_content", "error_description": "Payload is not json"})
+    return Response(res, status=status, mimetype='application/json')
+
+
 @app.route('/api/journaliser/fil', methods=['POST'])
+@ah.authorization(ADD_FILE_ROLE)
 def sbsys_journaliser_fil():
 
     # Check if request contains JSON data
@@ -52,4 +94,4 @@ def sbsys_journaliser_fil():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=8080)
+    app.run(debug=DEBUG, host='0.0.0.0', port=8080)
