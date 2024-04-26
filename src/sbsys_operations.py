@@ -30,7 +30,7 @@ class SBSYSOperations:
         
         if response:
             print("Search results:" + str(response))
-            latest_object = max(response['Results'], key=lambda x: x['Oprettet'])
+            latest_object = max(response['Results'], key=lambda x: x['Oprettet'], default=None)
             print("Latest sag: " + str(latest_object))
             return latest_object
         else:
