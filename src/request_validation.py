@@ -1,7 +1,16 @@
+from werkzeug.datastructures import FileStorage
 from utils import convert_filestring_to_bytes
 
-def validate_cpr(cpr):
+
+def is_cpr(cpr):
+    if not (len(cpr) == 10 and cpr.isdigit()) and not (len(cpr) == 11 and cpr[:6].isdigit() and cpr[6] == '-' and cpr[7:].isdigit()):
+        return False
     return True
+
+def is_pdf(file):
+    if isinstance(file, FileStorage):
+        return file.mimetype == 'application/pdf' and file.filename.split('.')[-1].lower()  == 'pdf'
+    return False
 
 def validate_file(filestring):
      return convert_filestring_to_bytes(filestring).startswith(b'%PDF')
