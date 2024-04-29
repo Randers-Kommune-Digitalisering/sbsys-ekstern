@@ -96,8 +96,7 @@ class SBSYSClient:
 
     # journaliser fil
     def journalise_file_personalesag(self, data, files, delforloeb_id):
-
-        path = "api/dokument/journaliser/" + str(delforloeb_id)
+        path = "api/dokument/journaliser/" + str(delforloeb_id)        
         return self.api_client.post_upload(path, data=data, files=files)
     
 # Convert a base64 encoded string to file
