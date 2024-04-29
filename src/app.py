@@ -1,63 +1,58 @@
 from flask import Flask, jsonify, request
 from healthcheck import HealthCheck
-from request_validation import validate_request_journaliser_fil
+from request_validation import is_cpr, is_pdf
 from sbsys_operations import SBSYSOperations
-import requests, base64, os
 
-# docker build -t signatur-ansatdata .
-# docker run -d -p 8080:8080 signatur-ansatdata
+
 app = Flask(__name__)
 
 health = HealthCheck()
+sbsys = SBSYSOperations()
+
 app.add_url_rule("/healthz", "healthcheck", view_func=lambda: health.run())
 
-@app.route('/api/journaliser/fil', methods=['POST'])
-def sbsys_journaliser_fil():
+@app.route('/api/journaliser/ansattelse/fil', methods=['POST'])
+def sbsys_journaliser_ansattelse_fil():
+    # Get form data
+    cpr = request.form.get('cpr', None)
+    file = request.files.get('file', None)
 
-    # Check if request contains JSON data
-    if not request.is_json:
-        return jsonify({"error": "Request must contain JSON data"}), 400
+    if cpr and file:
+        if not is_cpr(cpr):
+            return jsonify({"error": "Not a valid cpr number"}), 400
+        
+        # TODO: Kun PDF filer? eller skal det være muligt at tilføje tekst filer?
+        if not is_pdf(file):
+            return jsonify({"error": "Not a valid PDF file"}), 400
 
-    # Extract JSON data from request
-    data = request.json
+        # Find newest personalesag based on CPR from request
+        sag = sbsys.find_newest_personalesag({"cpr":cpr, "sagType": {"Id": 5}})
+        
+        # Check if sag is None
+        if sag is None:
+            return jsonify({"error": "Failed to find case based on given cpr"}), 400
 
-    # Validate the request
-    validation_result, error_response = validate_request_journaliser_fil(data)
-    if not validation_result:
-        return jsonify(error_response), 400  # Return error response if validation fails
+        delforloeb_array = sbsys.find_personalesag_delforloeb(sag)
+        if len(delforloeb_array) < 1:
+            return jsonify({"error": "Failed to find delforløb, try again"}), 500
+        
+        delforloeb_object_from_index = delforloeb_array[0]  # Select the first delforloeb object 
+        delforloeb_id = delforloeb_object_from_index["ID"]  # Save the unique ID of the delforloeb object
 
-    # Find newest personalesag based on CPR from request
-    sbsys = SBSYSOperations()
-    sag = sbsys.find_newest_personalesag(data)
+        # Journalise file 
+        response = sbsys.journalise_file(sag, file, delforloeb_id)
+
+        # Check if sag is None
+        if response is None:
+            return jsonify({"error": "Failed to journalise file, try again"}), 500
+
+        #print(response)
+
+        # TODO Hvordan skal filen journaliseres? delforløb, navn, type.
+        return jsonify({"success": "File uploaded successfully"}), 200
     
-    # Check if sag is None
-    if sag is None:
-        return jsonify({"error": "Failed to retrieve search results based on given cpr"}), 500
+    return jsonify({"error": "Missing parameter, must contain cpr and file"}), 400
 
-    # Find delforloeb id for SBSYS sag
-    delforloeb_array = sbsys.find_personalesag_delforloeb(sag)  # array with delforloeb
-    mappe_id = None
-    if "mappeId" in data["sagData"]:
-        mappe_id = data["sagData"]["mappeId"]
-    else:
-        mappe_id = 0
-    delforloeb_object_from_index = delforloeb_array[mappe_id]  # Select the delforloeb object based on index given from sataData['mappeId]
-    delforloeb_id = delforloeb_object_from_index["ID"]  # Save the unique ID of the delforloeb object
-
-    # Journalise file 
-    fil = request.json.get('fil')
-    binary_data = base64.b64decode(fil)
-    response = sbsys.journalise_file(sag, binary_data, data, delforloeb_id)
-
-    # Check if sag is None
-    if response is None:
-        return jsonify({"error": "Failed to journalise file, try again"}), 500
-
-    print(response)
-
-    # TODO journaliser fil fra request på sagen fra find_newest_personalesag
-    # TODO Hvordan skal filen journaliseres? delforløb, navn, type.
-    return jsonify({"success": "Fil uploaded successfully"}), 200
 
 if __name__ == "__main__":
     app.run(debug=True, host='0.0.0.0', port=8080)
