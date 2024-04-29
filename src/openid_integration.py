@@ -1,67 +1,55 @@
-import json
-
+import requests
+import jwt
 from functools import wraps
-from keycloak import KeycloakOpenID, exceptions as keycloak_exceptions
+from cryptography.hazmat.primitives import serialization
 from flask import Response, request
+from base64 import b64decode
 
 
 class AuthorizationHelper:
-    def __init__(self, server_url, realm, client_id, client_secret):
-        self.keycloak_openid = KeycloakOpenID(server_url=server_url, client_id=client_id, realm_name=realm, client_secret_key=client_secret)
-        self.client_id = client_id
+    def __init__(self, keycloak_url, realm, audience):
+        self.algorithms = ["RS256"]
+        self.audience = audience
+        self.url = f"{keycloak_url}auth/realms/{realm}/"
+        self.public_key = self.get_public_key()
 
-    # Returns status code and response
-    def get_token(self, username, password):
+    def get_public_key(self):
         try:
-            token = self.keycloak_openid.token(username, password)
-            token_info = self.keycloak_openid.introspect(token['access_token'])
-            if 'sbsys-ekstern' in token_info['resource_access']:
-                return 200, json.dumps(token)
-            else:
-                raise keycloak_exceptions.KeycloakAuthenticationError(b'{"error":"invalid_resource_access","error_description":"User does not have access to this resource"}', 401)
-        except keycloak_exceptions.KeycloakAuthenticationError as e:
-            return e.response_code, e.error_message
+            r = requests.get(self.url)
+            r.raise_for_status()
+            key_der_base64 = r.json()["public_key"]
+            key_der = b64decode(key_der_base64.encode())
+            return serialization.load_der_public_key(key_der)
+        except requests.exceptions.RequestException as e:
+            return None
     
-    # Returns status code and response
-    def refresh_token(self, refresh_token):
+    def decode_token(self, token):
         try:
-            token = self.keycloak_openid.refresh_token(refresh_token)
-            return 200, json.dumps(token)
-        except keycloak_exceptions.KeycloakPostError as e:
-            return e.response_code, e.error_message
+            if not self.public_key:
+                self.public_key = self.public_key()
+            payload = jwt.decode(token, self.public_key, audience=self.audience, algorithms=self.algorithms)
+            return payload
+        except jwt.ExpiredSignatureError:
+            return None
+        except jwt.InvalidAudienceError:
+            return None
+        except jwt.InvalidTokenError:
+            return None
     
-    # Returns status code and response
-    def logout(self, refresh_token):
-        try:
-            self.keycloak_openid.logout(refresh_token)
-            return 200, "logout successful"
-        except keycloak_exceptions.KeycloakPostError as e:
-            return e.response_code, e.error_message
-
-    # Returns True/False
-    def has_role(self, access_token, role):
-        token_info = self.keycloak_openid.introspect(access_token)
-        if token_info['active']:
-            if self.client_id in token_info['resource_access']:
-                return role in token_info['resource_access'][self.client_id]['roles']
-        return False
-
-    # Decorator - checks token and role
-    def authorization(self, role):
-        def decorator(f):
-            @wraps(f)
-            def decorated_function(*args, **kwargs):
-                try:
-                    token_header = request.headers.get('Authorization')
-                    if not token_header:
-                        return Response(status=401, response="Unauthorized")
+    # Decorator - checks token
+    def authorization(self, f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                token_header = request.headers.get('Authorization')
+                if not token_header:
+                    return Response(status=401, response="Unauthorized")
+                else:
+                    token = token_header.split()[1]
+                    if self.decode_token(token):
+                        return f(*args, **kwargs)
                     else:
-                        token = token_header.split()[1]
-                        if self.has_role(token, role):
-                            return f(*args, **kwargs)
-                        else:
-                            return Response(status=401, response="Unauthorized")
-                except Exception as e:
-                    return Response(status=401, response=str(e))
-            return decorated_function
-        return decorator
+                        return Response(status=401, response="Unauthorized")
+            except Exception as e:
+                return Response(status=401, response=str(e))
+        return decorated_function
