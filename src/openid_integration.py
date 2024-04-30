@@ -1,9 +1,13 @@
 import requests
 import jwt
+import logging
 from functools import wraps
 from cryptography.hazmat.primitives import serialization
 from flask import Response, request
 from base64 import b64decode
+
+
+logger = logging.getLogger(__name__)
 
 
 class AuthorizationHelper:
@@ -26,7 +30,11 @@ class AuthorizationHelper:
     def decode_token(self, token):
         try:
             if not self.public_key:
-                self.public_key = self.public_key()
+                self.public_key = self.get_public_key()
+                if not self.public_key:
+                    logging.error('No public key - cannot verify tokens')
+                    return None
+
             payload = jwt.decode(token, self.public_key, audience=self.audience, algorithms=self.algorithms)
             return payload
         except jwt.ExpiredSignatureError:
