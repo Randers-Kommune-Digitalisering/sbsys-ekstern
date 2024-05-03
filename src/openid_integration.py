@@ -14,7 +14,7 @@ class AuthorizationHelper:
     def __init__(self, keycloak_url, realm, audience):
         self.algorithms = ["RS256"]
         self.audience = audience
-        self.url = f"{keycloak_url.strip()}auth/realms/{realm}/"
+        self.url = f"{keycloak_url}auth/realms/{realm}/"
 
         logging.error(self.audience)
 
@@ -31,7 +31,7 @@ class AuthorizationHelper:
             return None
     
     def decode_token(self, token):
-        logging.error('DECODE')
+        logging.error(self.audience)
         try:
             if not self.public_key:
                 self.public_key = self.get_public_key()
