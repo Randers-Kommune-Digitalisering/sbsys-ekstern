@@ -51,14 +51,18 @@ class AuthorizationHelper:
         def decorated_function(*args, **kwargs):
             try:
                 token_header = request.headers.get('Authorization')
+                print(token_header)
                 if not token_header:
                     return Response(status=401, response="Unauthorized")
                 else:
                     token = token_header.split()[1]
+                    print(token)
                     if self.decode_token(token):
                         return f(*args, **kwargs)
                     else:
+                        print("Decode token retunr nothing")
                         return Response(status=401, response="Unauthorized")
             except Exception as e:
+                print(e)
                 return Response(status=401, response=str(e))
         return decorated_function
