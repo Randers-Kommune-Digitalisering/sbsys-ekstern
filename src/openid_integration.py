@@ -15,9 +15,6 @@ class AuthorizationHelper:
         self.algorithms = ["RS256"]
         self.audience = audience
         self.url = f"{keycloak_url}auth/realms/{realm}/"
-
-        logging.error(self.audience)
-
         self.public_key = self.get_public_key()
 
     def get_public_key(self):
@@ -31,7 +28,6 @@ class AuthorizationHelper:
             return None
     
     def decode_token(self, token):
-        logging.error(self.audience)
         try:
             if not self.public_key:
                 self.public_key = self.get_public_key()
@@ -40,16 +36,12 @@ class AuthorizationHelper:
                     return None
 
             payload = jwt.decode(token, self.public_key, audience=self.audience, algorithms=self.algorithms)
-            logging.error(payload)
             return payload
         except jwt.ExpiredSignatureError:
-            logging.error('Expired')
             return None
         except jwt.InvalidAudienceError:
-            logging.error('Audience')
             return None
         except jwt.InvalidTokenError:
-            logging.error('Invalid token')
             return None
     
     # Decorator - checks token
@@ -58,18 +50,16 @@ class AuthorizationHelper:
         def decorated_function(*args, **kwargs):
             try:
                 token_header = request.headers.get('Authorization')
-                print(token_header)
                 if not token_header:
                     return Response(status=401, response="Unauthorized")
                 else:
                     token = token_header.split()[1]
-                    print(token)
                     if self.decode_token(token):
                         return f(*args, **kwargs)
                     else:
                         print("Decode token retunr nothing")
                         return Response(status=401, response="Unauthorized")
             except Exception as e:
-                print(e)
+                logging.error(e)
                 return Response(status=401, response=str(e))
         return decorated_function
