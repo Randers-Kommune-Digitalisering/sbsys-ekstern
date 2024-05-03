@@ -1,6 +1,10 @@
-import requests, base64, time
+import requests, base64, time, logging
 
 from config import SBSYS_URL, SBSIP_URL, SBSYS_CLIENT_ID, SBSYS_CLIENT_SECRET, SBSYS_USERNAME, SBSYS_PASSWORD
+
+
+logger = logging.getLogger(__name__)
+
 # Håndtering af http request
 class APIClient:
     def __init__(self, sbsys_url, sbsip_url, client_id, client_secret, username, password):
@@ -33,7 +37,7 @@ class APIClient:
             self.token_expires = time.time() + data['expires_in']
             return self.access_token
         except requests.exceptions.RequestException as e:
-            print("Error:", e)
+            logging.error(e)
 
     def get_access_token(self):
         # Check if there is a valid access token and it hasn't expired yet
@@ -59,7 +63,7 @@ class APIClient:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            print(f"Error: {e}")
+            logging.error(e)
             return None
 
     def get(self, path):
