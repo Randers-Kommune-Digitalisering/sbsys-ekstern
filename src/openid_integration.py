@@ -36,6 +36,7 @@ class AuthorizationHelper:
                     return None
 
             payload = jwt.decode(token, self.public_key, audience=self.audience, algorithms=self.algorithms)
+            print(payload)
             return payload
         except jwt.ExpiredSignatureError:
             return None
