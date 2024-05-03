@@ -1,17 +1,25 @@
-from flask import Flask, jsonify, request
+import base64
+import json
+
+from flask import Flask, Response, jsonify, request
 from healthcheck import HealthCheck
-from request_validation import is_cpr, is_pdf
 from sbsys_operations import SBSYSOperations
+from openid_integration import AuthorizationHelper
+from config import DEBUG, KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE
+from request_validation import is_cpr, is_pdf
 
 
 app = Flask(__name__)
-
 health = HealthCheck()
+ah = AuthorizationHelper(KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE)
 sbsys = SBSYSOperations()
+
 
 app.add_url_rule("/healthz", "healthcheck", view_func=lambda: health.run())
 
+
 @app.route('/api/journaliser/ansattelse/fil', methods=['POST'])
+@ah.authorization
 def sbsys_journaliser_ansattelse_fil():
     # Get form data
     cpr = request.form.get('cpr', None)
@@ -21,7 +29,6 @@ def sbsys_journaliser_ansattelse_fil():
         if not is_cpr(cpr):
             return jsonify({"error": "Not a valid cpr number"}), 400
         
-        # TODO: Kun PDF filer? eller skal det være muligt at tilføje tekst filer?
         if not is_pdf(file):
             return jsonify({"error": "Not a valid PDF file"}), 400
 
@@ -46,8 +53,6 @@ def sbsys_journaliser_ansattelse_fil():
         if response is None:
             return jsonify({"error": "Failed to journalise file, try again"}), 500
 
-        #print(response)
-
         # TODO Hvordan skal filen journaliseres? delforløb, navn, type.
         return jsonify({"success": "File uploaded successfully"}), 200
     
@@ -55,4 +60,4 @@ def sbsys_journaliser_ansattelse_fil():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=8080)
+    app.run(debug=DEBUG, host='0.0.0.0', port=8080)
