@@ -16,7 +16,7 @@ class AuthorizationHelper:
         self.audience = audience
         self.url = f"{keycloak_url.strip()}auth/realms/{realm}/"
 
-        print(self.audience)
+        logging.error(self.audience)
 
         self.public_key = self.get_public_key()
 
@@ -31,6 +31,7 @@ class AuthorizationHelper:
             return None
     
     def decode_token(self, token):
+        logging.error('DECODE')
         try:
             if not self.public_key:
                 self.public_key = self.get_public_key()
@@ -39,16 +40,16 @@ class AuthorizationHelper:
                     return None
 
             payload = jwt.decode(token, self.public_key, audience=self.audience, algorithms=self.algorithms)
-            print(payload)
+            logging.error(payload)
             return payload
         except jwt.ExpiredSignatureError:
-            print('Expired')
+            logging.error('Expired')
             return None
         except jwt.InvalidAudienceError:
-            print('Audience')
+            logging.error('Audience')
             return None
         except jwt.InvalidTokenError:
-            print('Invalid token')
+            logging.error('Invalid token')
             return None
     
     # Decorator - checks token
