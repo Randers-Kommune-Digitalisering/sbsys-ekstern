@@ -19,10 +19,14 @@ class AuthorizationHelper:
 
     def get_public_key(self):
         try:
+            print(self.url)
             r = requests.get(self.url)
+            print(r.status_code)
             r.raise_for_status()
             key_der_base64 = r.json()["public_key"]
+            print(key_der_base64)
             key_der = b64decode(key_der_base64.encode())
+            print(key_der)
             return serialization.load_der_public_key(key_der)
         except requests.exceptions.RequestException as e:
             return None
