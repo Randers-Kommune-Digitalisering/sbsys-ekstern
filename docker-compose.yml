@@ -2,6 +2,7 @@ version: "3.9"
 services:
   app:
     build: .
+    read_only: true
     networks:
       - app_network
     ports:
