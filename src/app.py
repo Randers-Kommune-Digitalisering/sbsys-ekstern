@@ -25,8 +25,6 @@ def sbsys_journaliser_ansattelse_fil():
     cpr = request.form.get('cpr', None)
     file = request.files.get('file', None)
 
-    return 'ok'
-
     if cpr and file:
         if not is_cpr(cpr):
             return jsonify({"error": "Not a valid cpr number"}), 400
