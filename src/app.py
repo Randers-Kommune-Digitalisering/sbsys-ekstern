@@ -40,7 +40,7 @@ def sbsys_journaliser_ansattelse_fil():
 
     # Check if sag is None
     if sag is None:
-        return jsonify({"error": "Failed to find case based on given cpr"}), 400
+        return jsonify({"error": "Failed to find active case based on given cpr"}), 400
 
     # Check if the case is older than 24 hours
     now = datetime.datetime.now(datetime.timezone.utc)

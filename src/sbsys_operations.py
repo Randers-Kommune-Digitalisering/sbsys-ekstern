@@ -25,13 +25,14 @@ class SBSYSOperations:
             }
 
             # Call the search_cases method with the JSON data
+            # Filter for active cases only
             response = self.client.search_cases(json_data)
-
             if response:
-                latest_object = max(response['Results'], key=lambda x: x['Oprettet'], default=None)
-                return latest_object
-            else:
-                return None
+                active_cases = [case for case in response['Results'] if case['SagsStatus']['Id'] == 6]
+                if active_cases:
+                    latest_object = max(active_cases, key=lambda x: x['Oprettet'], default=None)
+                    return latest_object
+            return None
         except Exception as e:
             print("An error occurred in find_newest_personalesag:", e)
             return None
