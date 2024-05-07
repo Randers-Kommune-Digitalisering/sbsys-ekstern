@@ -42,6 +42,13 @@ def sbsys_journaliser_ansattelse_fil():
     if sag is None:
         return jsonify({"error": "Failed to find case based on given cpr"}), 400
 
+    # Check if the case is older than 24 hours
+    now = datetime.datetime.now(datetime.timezone.utc)
+    case_creation_time = datetime.datetime.strptime(sag["Oprettet"], "%Y-%m-%dT%H:%M:%S.%f%z")
+    time_difference = now - case_creation_time
+    if time_difference.days > 0:  # 24 hours
+        return jsonify({"error": "Failed to find case based on given cpr. The case is older than 24 hours."}), 400
+
     # For a given sag, save the array of delforloeb
     delforloeb_array = sbsys.find_personalesag_delforloeb(sag)
     if len(delforloeb_array) < 1:
