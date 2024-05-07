@@ -7,67 +7,69 @@ class SBSYSOperations:
         self.client = SBSYSClient()
 
     def find_newest_personalesag(self, data):
+        try:
+            cpr = data["cpr"]
+            if len(cpr) == 10:
+                cpr = cpr[:6] + "-" + cpr[6:]
 
-        # Reformat cpr key if neccessary
-        cpr = data["cpr"]
-        if len(cpr) == 10:
-            cpr = cpr[:6] + "-" + cpr[6:]
+            # JSON data for search_cases
+            json_data = {
+                "PrimaerPerson": {
+                    "CprNummer": cpr
+                },
+                "SagsTyper": [
+                    {
+                        "Id": data["sagType"]["Id"]
+                    }
+                ]
+            }
 
-        # JSON data for search_cases
-        json_data = {
-            "PrimaerPerson": {
-                "CprNummer": cpr
-            },
-            "SagsTyper": [
-                {
-                "Id": data["sagType"]["Id"]
-                }
-            ]
-        } 
+            # Call the search_cases method with the JSON data
+            response = self.client.search_cases(json_data)
 
-        # Call the search cases method with the JSON data
-        response = self.client.search_cases(json_data)
-        
-        if response:
-            #print("Search results:" + str(response))
-            latest_object = max(response['Results'], key=lambda x: x['Oprettet'], default=None)
-            #print("Latest sag: " + str(latest_object))
-            return latest_object
-        else:
-            #print("Failed to retrieve search results")
+            if response:
+                latest_object = max(response['Results'], key=lambda x: x['Oprettet'], default=None)
+                return latest_object
+            else:
+                return None
+        except Exception as e:
+            print("An error occurred in find_newest_personalesag:", e)
             return None
 
     def find_personalesag_delforloeb(self, sag):
+        try:
+            # Call the journalise_file_personalesag method and capture the response
+            response = self.client.get_sag_delforloeb(sag)
 
-        # Call the journalise_file_personalesag method and capture the response
-        response = self.client.get_sag_delforloeb(sag)
-
-        # Check if the response is received
-        if response:
-            #print("Response:", response)
-            return response
-        else:
-            #print("Failed to retrieve search results")
+            # Check if the response is received
+            if response:
+                return response
+            else:
+                return None
+        except Exception as e:
+            print("An error occurred in find_personalesag_delforloeb:", e)
             return None
 
     def journalise_file(self, sag, file, delforloeb_id):
-        sag_id = sag['Id']
-        # Call the journalise_file_personalesag method with the JSON data
-        json_data = {
-            "json": f'{{"SagID": {sag_id}, "OmfattetAfAktindsigt": true, "DokumentNavn": "Ansættelses Data", "DokumentArt": {{"Id": 1}}}}'  # DokumentArt Id 1 = "Indgående" dokument art
-        }
-        #print("json_data: " + str(json_data))
+        try:
+            sag_id = sag['Id']
+            # Call the journalise_file_personalesag method with the JSON data
+            json_data = {
+                "json": f'{{"SagID": {sag_id}, "OmfattetAfAktindsigt": true, "DokumentNavn": "E-recruttering - Ansættelsesdata", "DokumentArt": {{"Id": 1}}}}'
+                # DokumentArt Id 1 = "Indgående" dokument art
+            }
 
-        # Prepare the files parameter as a dictionary
-        files = {'file': (file.filename, file.stream, file.mimetype)}
+            # Prepare the files parameter as a dictionary
+            files = {'file': (file.filename, file.stream, file.mimetype)}
 
-        # Call the journalise_file_personalesag method and capture the response
-        response = self.client.journalise_file_personalesag(json_data, files, delforloeb_id)
+            # Call the journalise_file_personalesag method and capture the response
+            response = self.client.journalise_file_personalesag(json_data, files, delforloeb_id)
 
-        # Check if the response is received
-        if response:
-            #print("Response:", response)
-            return response
-        else:
-            #print("Failed to retrieve search results")
+            # Check if the response is received
+            if response:
+                return response
+            else:
+                return None
+        except Exception as e:
+            print("An error occurred in journalise_file:", e)
             return None
