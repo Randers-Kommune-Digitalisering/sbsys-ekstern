@@ -1,12 +1,13 @@
 import base64
 import json
+import uuid
 
 from flask import Flask, Response, jsonify, request
 from healthcheck import HealthCheck
 from sbsys_operations import SBSYSOperations
 from openid_integration import AuthorizationHelper
 from config import DEBUG, KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE
-from request_validation import is_cpr, is_pdf
+from request_validation import is_cpr, is_pdf, is_timestamp
 import datetime
 
 
@@ -18,37 +19,167 @@ sbsys = SBSYSOperations()
 
 app.add_url_rule("/healthz", "healthcheck", view_func=lambda: health.run())
 
+# In-memory collection of SignaturFileupload objects
+signatur_fileuploads = {}
+current_id = -1
+
+class SignaturFileupload:
+    def __init__(self, file, timestamp: str, cpr: str, sag_id: int = None):
+        global current_id
+        self.file = file
+        self.timestamp = timestamp
+        self.cpr = cpr
+        self.sag_id = sag_id
+        self.id = str(uuid.uuid4())  # Generate a unique ID as a string
+
+    def __repr__(self):
+        return f"<file:{self.file} timestamp:{self.timestamp} cpr:{self.cpr} id:{self.id}>"
+
+    def fetch_id(self):
+        return self.id
+
+@app.route('/api/journaliser/ansattelse/status', methods=['POST'])
+@ah.authorization
+def sbsys_journaliser_ansattelse_status():
+    # Get form data
+    cpr = request.form.get('cpr', None)
+    timestamp = request.form.get('timestamp', None)
+    file = request.files.get('file', None)
+    id = request.form.get('id', None)
+
+    if not (cpr and timestamp and file) and not id:
+        return jsonify({"error": "Missing form-data parameter, must contain cpr, timestamp and file, or id"}), 400
+
+    if file and timestamp and cpr:
+        if not is_cpr(cpr):
+            return jsonify(
+                {"error": "Not a valid cpr number. It must be digits in either 'ddmmyyxxxx' or 'ddmmyy-xxxx' format"}), 400
+
+        if not is_timestamp(timestamp):
+            return jsonify({"error": "Timestamp is not in ISO 8601 format."}), 400
+
+        if not is_pdf(file):
+            return jsonify({"error": "Not a valid PDF file"}), 400
+
+        # Create and store the SignaturFileupload object
+        upload = SignaturFileupload(file=file, timestamp=timestamp, cpr=cpr)
+        signatur_fileuploads[upload.fetch_id()] = upload
+
+        return jsonify({"uploadSuccess": False, "id": upload.fetch_id()}), 200
+
+    if id:
+        upload = signatur_fileuploads.get(id)
+
+        if not upload:
+            return jsonify({"error": "Pending upload not found with given id"}), 404
+
+        # Find newest personalesag based on CPR from request
+        sag = sbsys.find_newest_personalesag({"cpr": upload.cpr, "sagType": {"Id": 5}})
+        print(upload.cpr)
+
+        # Check if sag is None
+        if sag is None:
+            return jsonify({"error": "Failed to find active case based on given cpr"}), 400
+
+        # Convert timestamp to datetime
+        timestamp = datetime.datetime.fromisoformat(upload.timestamp)
+        time_difference_seconds = compare_sag_datetime(sag, timestamp)
+
+        # Check if the time difference is within 5 minutes (300 seconds)
+        if time_difference_seconds >= -300:
+            print("The case is within 5 minutes before or any time after the timestamp.")
+            return jsonify({"success": True, "message": "File can be uploaded with id", "id": upload.id, "cpr": upload.cpr, "timestamp": timestamp}), 200
+        else:
+            print("The case is not within 5 minutes before or any time after the timestamp.")
+            print("Found case creation time: " + sag['Oprettet'] + "\n timestamp: " + str(upload.timestamp))
+            return jsonify({"success": False, "message": "No case exists within 5 minutes before the given timestamp.", "id": upload.id, "cpr": upload.cpr, "timestamp": upload.timestamp}), 200
+
+    return jsonify({"error": "Server error"}), 500
+
 
 @app.route('/api/journaliser/ansattelse/fil', methods=['POST'])
 @ah.authorization
 def sbsys_journaliser_ansattelse_fil():
     # Get form data
     cpr = request.form.get('cpr', None)
+    timestamp = request.form.get('timestamp', None)
     file = request.files.get('file', None)
+    id = request.form.get('id', None)
 
-    if not cpr or not file:
-        return jsonify({"error": "Missing parameter, must contain cpr and file"}), 400
+    upload = None
+    if not (cpr and timestamp and file) and not id:
+        return jsonify({"error": "Missing form-data parameter, must contain cpr, timestamp and file, or id"}), 400
 
-    if not is_cpr(cpr):
-        return jsonify({"error": "Not a valid cpr number. It must be digits in either 'xxxxxxxxxx' or 'xxxxxx-xxxx' format"}), 400
+    if file and timestamp and cpr:
+        if not is_cpr(cpr):
+            return jsonify(
+                {"error": "Not a valid cpr number. It must be digits in either 'ddmmyyxxxx' or 'ddmmyy-xxxx' format"}), 400
 
-    if not is_pdf(file):
-        return jsonify({"error": "Not a valid PDF file"}), 400
+        if not is_timestamp(timestamp):
+            return jsonify({"error": "Timestamp is not in ISO 8601 format."}), 400
+
+        if not is_pdf(file):
+            return jsonify({"error": "Not a valid PDF file"}), 400
+
+        # Create and store the SignaturFileupload object
+        upload = SignaturFileupload(file=file, timestamp=timestamp, cpr=cpr)
+        signatur_fileuploads[upload.fetch_id()] = upload
+
+    if id:
+        upload = signatur_fileuploads.get(id)
+
+        if not upload:
+            return jsonify({"error": "Upload attempt was not found with given id"}), 404
+
+    if not upload:
+        return jsonify({"error": "No upload object found"}), 500
 
     # Find newest personalesag based on CPR from request
-    sag = sbsys.find_newest_personalesag({"cpr":cpr, "sagType": {"Id": 5}})
+    sag = fetch_sag(cpr)
 
     # Check if sag is None
     if sag is None:
-        return jsonify({"error": "Failed to find active case based on given cpr"}), 400
+        return jsonify({success_message(False, upload.id) + "reason": "Failed to find active case based on given cpr"}), 200
 
-    # Check if the case is older than 24 hours
-    now = datetime.datetime.now(datetime.timezone.utc)
+    # Convert timestamp to datetime
+    timestamp = datetime.datetime.fromisoformat(upload.timestamp)
+    time_difference_seconds = compare_sag_datetime(sag, timestamp)
+    print(time_difference_seconds)
+
+    # Check if the time difference is within 5 minutes (300 seconds)
+    if time_difference_seconds >= -300:
+        print("The case is within 5 minutes before or any time after the timestamp.")
+        return jsonify(
+            {"success": True, "message": "File was uploaded successfully", "id": upload.id, "cpr": upload.cpr,
+             "timestamp": timestamp}), 200
+    else:
+        print("The case is not within 5 minutes before or any time after the timestamp.")
+        print("Found case creation time: " + sag['Oprettet'] + "\n timestamp: " + str(upload.timestamp))
+        return jsonify(
+            {success_message(False, upload.id) + "reason": "Case is not created after timestamp minues 5 minutes",
+             "id": upload.id, "cpr": upload.cpr, "timestamp": upload.timestamp}), 200
+
+
+def success_message(success: bool, id: str):
+    return f'success": {success}, "id": {id}, "message": "File can be uploaded using id'
+
+
+def fetch_sag(cpr):
+    # Find newest personalesag based on CPR from request
+    return sbsys.find_newest_personalesag({"cpr": cpr, "sagType": {"Id": 5}})
+
+
+def compare_sag_datetime(sag: object, timestamp: datetime):
+    # Convert timestamp string to datetime object
+
     case_creation_time = datetime.datetime.strptime(sag["Oprettet"], "%Y-%m-%dT%H:%M:%S.%f%z")
-    time_difference = now - case_creation_time
-    if time_difference.days > 0:  # 24 hours
-        return jsonify({"error": "Failed to find case based on given cpr. The case is older than 24 hours."}), 400
+    print(timestamp)
+    print(case_creation_time)
+    # Calculate the time difference in seconds
+    return ( case_creation_time - timestamp).total_seconds()
 
+
+def journalise_document(sag, file):
     # For a given sag, save the array of delforloeb
     delforloeb_array = sbsys.find_personalesag_delforloeb(sag)
     if len(delforloeb_array) < 1:
@@ -64,8 +195,6 @@ def sbsys_journaliser_ansattelse_fil():
     if response is None:
         return jsonify({"error": "Failed to journalise file, try again"}), 500
 
-    # TODO Hvordan skal filen journaliseres? delforløb, navn, type.
-    return jsonify({"success": "File uploaded successfully"}), 200
 
 if __name__ == "__main__":
     app.run(debug=DEBUG, host='0.0.0.0', port=8080)
