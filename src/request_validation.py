@@ -1,3 +1,4 @@
+import datetime
 from werkzeug.datastructures import FileStorage
 from utils import convert_filestring_to_bytes
 
@@ -7,9 +8,18 @@ def is_cpr(cpr):
         return False
     return True
 
+
 def is_pdf(file):
     if isinstance(file, FileStorage):
         return file.mimetype == 'application/pdf' and file.filename.split('.')[-1].lower()  == 'pdf'
+    return False
+
+
+def is_timestamp(timestamp_str):
+    # Attempt to parse the timestamp string
+    timestamp = datetime.datetime.fromisoformat(timestamp_str)
+    if timestamp:
+        return True
     return False
 
 def validate_file(filestring):
