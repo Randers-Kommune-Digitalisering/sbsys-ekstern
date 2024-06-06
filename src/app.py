@@ -21,12 +21,10 @@ app.add_url_rule("/healthz", "healthcheck", view_func=lambda: health.run())
 
 # In-memory collection of SignaturFileupload objects
 signatur_fileuploads = {}
-current_id = -1
 
 
 class SignaturFileupload:
     def __init__(self, file, timestamp: str, cpr: str):
-        global current_id
         self.file = file
         self.timestamp = timestamp
         self.cpr = cpr
@@ -73,15 +71,14 @@ def sbsys_journaliser_ansattelse_fil():
             upload = signatur_fileuploads.get(id)
 
             if not upload:
-                return jsonify({"error": "Upload attempt was not found with given id"}), 404
+                return jsonify({"error": "No upload object was found with given id. Please retry with cpr, timestamp and file, to generate an upload object"}), 404
 
             cpr = upload.cpr
             timestamp = upload.timestamp
             file = upload.file
-            id = upload.id
 
         if not upload:
-            return jsonify({"error": "No upload object found or created"}), 404
+            return jsonify({"error": "No upload object found or created. Please retry with cpr, timestamp and file, to generate an upload object"}), 404
 
         # Find newest personalesag based on CPR from request
         sag = fetch_sag(cpr)
@@ -89,18 +86,21 @@ def sbsys_journaliser_ansattelse_fil():
         # Check if sag is None
         if sag is None:
             return jsonify(
-                {**success_message(False, id), "reason": "Failed to find active case based on given cpr"}), 200
+                {**success_message(False, upload), "reason": "Failed to find active case based on given cpr"}), 200
 
         # Convert timestamp to datetime
         timestamp_datetime = datetime.datetime.fromisoformat(timestamp)
         case_creation_time = datetime.datetime.strptime(sag["Oprettet"], "%Y-%m-%dT%H:%M:%S.%f%z")
         time_difference_seconds = (case_creation_time - timestamp_datetime).total_seconds()
-        print(time_difference_seconds)
 
         # Check if the time difference is within 5 minutes (300 seconds)
         if time_difference_seconds <= 300:
             print("The case is within 5 minutes before or any time after the timestamp.")
             journalise_document(sag, file, upload)
+
+            # Remove the upload object from the list after successful journalising
+            del signatur_fileuploads[upload.fetch_id()]
+
             return jsonify({**success_message(True, upload), "cpr": upload.cpr, "timestamp": timestamp}), 200
         else:
             print("The case is not within 5 minutes before or any time after the timestamp.")
@@ -127,6 +127,7 @@ def fetch_sag(cpr):
     # Find newest personalesag based on CPR from request
     return sbsys.find_newest_personalesag({"cpr": cpr, "sagType": {"Id": 5}})
 
+
 class JournalisationError(Exception):
     def __init__(self, reason, status_code, upload):
         self.reason = reason
@@ -149,6 +150,7 @@ def journalise_document(sag: object, file, upload):
     # Check if sag is None
     if response is None:
         raise JournalisationError("Failed to journalise file, try again", 500, upload)
+
 
 if __name__ == "__main__":
     app.run(debug=DEBUG, host='0.0.0.0', port=8080)
