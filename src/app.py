@@ -1,15 +1,12 @@
-import base64
-import json
-import uuid
-import datetime
-
-from flask import Flask, Response, jsonify, request
+from flask import Flask, request
 from healthcheck import HealthCheck
+
+import http_status as status
 from sbsys_operations import SBSYSOperations
 from openid_integration import AuthorizationHelper
 from config import DEBUG, KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE
-from request_validation import is_cpr, is_pdf, is_timestamp
-
+from request_validation import is_cpr, is_employment, is_pdf, is_timestamp
+from utils import generate_response, STATUS_CODE, SignaturFileupload
 
 app = Flask(__name__)
 health = HealthCheck()
@@ -19,101 +16,115 @@ sbsys = SBSYSOperations()
 
 app.add_url_rule("/healthz", "healthcheck", view_func=lambda: health.run())
 
+
 # In-memory collection of SignaturFileupload objects
 signatur_fileuploads = {}
 
 
-class SignaturFileupload:
-    def __init__(self, file, timestamp: str, cpr: str):
-        self.file = file
-        self.timestamp = timestamp
-        self.cpr = cpr
-        self.id = str(uuid.uuid4())  # Generate a unique ID as a string
-
-    def __repr__(self):
-        return f"<file:{self.file} timestamp:{self.timestamp} cpr:{self.cpr} id:{self.id}>"
-
-    def fetch_id(self):
-        return self.id
-
-
-@app.route('/api/journaliser/ansattelse/fil', methods=['POST'])
-@ah.authorization
+@app.route('/api/journaliser/ansattelse/fil', methods=['POST', 'PUT'])
+#@ah.authorization
 def sbsys_journaliser_ansattelse_fil():
     try:
+
         # Get form data
-        cpr = request.form.get('cpr', None)
-        timestamp = request.form.get('timestamp', None)
-        file = request.files.get('file', None)
         id = request.form.get('id', None)
-
+        cpr = request.form.get('cpr', None)
+        employment = request.form.get('employment', None)
+        file = request.files.get('file', None)
+        
         upload = None
-        if not (cpr and timestamp and file) and not id:
-            return jsonify({"error": "Missing form-data parameter, must contain cpr, timestamp and file, or id"}), 400
+        http_status_code = status.HTTP_201_CREATED
+        msg = "File created"
 
-        if file and timestamp and cpr:
-            if not is_cpr(cpr):
-                return jsonify(
-                    {"error": "Not a valid cpr number. It must be digits in either 'ddmmyyxxxx' or 'ddmmyy-xxxx' format"}), 400
+        if request.method == 'POST':
+            if not (cpr and employment and file):
+                return generate_response("Missing form-data parameter, must contain cpr, employment and file", http_code=status.HTTP_400_BAD_REQUEST)
+            else:
+                if not is_cpr(cpr):
+                    return generate_response("Not a valid cpr number. It must be digits in either 'ddmmyyxxxx' or 'ddmmyy-xxxx' format", status.HTTP_400_BAD_REQUEST)
 
-            if not is_timestamp(timestamp):
-                return jsonify({"error": "Timestamp is not in ISO 8601 format."}), 400
+                if not is_employment(employment):
+                    return generate_response("Employment is not a five digit integer.", status.HTTP_400_BAD_REQUEST)
 
-            if not is_pdf(file):
-                return jsonify({"error": "Not a valid PDF file"}), 400
+                if not is_pdf(file):
+                    return generate_response("Not a valid PDF file", status.HTTP_400_BAD_REQUEST)
+                
+                upload = SignaturFileupload(file=file, employment=employment, cpr=cpr)
+                signatur_fileuploads[upload.get_id()] = upload
 
-            # Create and store the SignaturFileupload object
-            upload = SignaturFileupload(file=file, timestamp=timestamp, cpr=cpr)
-            signatur_fileuploads[upload.fetch_id()] = upload
+        elif request.method == 'PUT':
+            if id:
+                upload = signatur_fileuploads.get(id)
+                if upload:
+                    if cpr:
+                        if is_cpr(cpr):
+                            upload.cpr = cpr
+                        else:
+                            return generate_response("Not a valid cpr number. It must be digits in either 'ddmmyyxxxx' or 'ddmmyy-xxxx' format", status.HTTP_400_BAD_REQUEST)
+                    if employment:
+                        if is_employment(employment):
+                            upload.employment = employment
+                        else:
+                            return generate_response("Employment is not a five digit integer.", status.HTTP_400_BAD_REQUEST)
+                    if file:
+                        if is_pdf(file):    
+                            upload.file = file
+                        else:    
+                            return generate_response("Not a valid PDF file", status.HTTP_400_BAD_REQUEST)
 
-        if id:
-            # Fetch Fileupload object with id
-            upload = signatur_fileuploads.get(id)
+                    upload.status = STATUS_CODE.UPDATED
+                    http_status_code = status.HTTP_200_OK
+                    msg = "File updated"
+                else:
+                    return generate_response("File not found", status.HTTP_404_NOT_FOUND, received_id=id)
+            else:
+                return generate_response("Missing id parameter", status.HTTP_400_BAD_REQUEST)
 
-            if not upload:
-                return jsonify({"error": "No upload object was found with given id. Please retry with cpr, timestamp and file, to generate an upload object"}), 404
-
-            cpr = upload.cpr
-            timestamp = upload.timestamp
-            file = upload.file
-
-        if not upload:
-            return jsonify({"error": "No upload object found or created. Please retry with cpr, timestamp and file, to generate an upload object"}), 404
-
-        # Find newest personalesag based on CPR from request
-        sag = fetch_sag(cpr)
-
-        # Check if sag is None
-        if sag is None:
-            return jsonify(
-                {**success_message(False, upload), "reason": "Failed to find active case based on given cpr"}), 200
-
-        # Convert timestamp to datetime
-        timestamp_datetime = datetime.datetime.fromisoformat(timestamp)
-        case_creation_time = datetime.datetime.strptime(sag["Oprettet"], "%Y-%m-%dT%H:%M:%S.%f%z")
-        time_difference_seconds = (case_creation_time - timestamp_datetime).total_seconds()
-
-        # Check if the time difference is within 5 minutes (300 seconds)
-        if time_difference_seconds <= 300:
-            print("The case is within 5 minutes before or any time after the timestamp.")
-            journalise_document(sag, file, upload)
-
-            # Remove the upload object from the list after successful journalising
-            del signatur_fileuploads[upload.fetch_id()]
-
-            return jsonify({**success_message(True, upload), "cpr": upload.cpr, "timestamp": timestamp}), 200
         else:
-            print("The case is not within 5 minutes before or any time after the timestamp.")
-            print("Found case creation time: " + sag['Oprettet'] + "\n timestamp: " + str(upload.timestamp))
-            return jsonify(
-                {**success_message(False, upload), "reason": "Case is not created after timestamp minus 5 minutes"}), 200
+            raise Exception("Unsupported HTTP method")
 
-    except JournalisationError as e:
-        return jsonify({"error": e.message}), e.status_code
+        return generate_response(msg, http_status_code, upload)
 
     except Exception as e:
         print(f"Unexpected error: {e}")
-        return jsonify({"error": "An unexpected error occurred"}), 500
+        return generate_response("An unexpected error occurred", status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@app.route('/api/journaliser/ansattelse/fil', methods=['GET'])
+#@ah.authorization
+def sbsys_journaliser_ansattelse_fil_status():
+    id = request.args.get('id', None)
+    if id:
+        upload = signatur_fileuploads.get(id)
+        if upload:
+            # TODO: Fix message
+            return generate_response(status.HTTP_202_ACCEPTED, upload)
+        return generate_response("File not found", status.HTTP_404_NOT_FOUND, received_id=id)
+    else:
+        return generate_response("Missing id parameter", status.HTTP_400_BAD_REQUEST)
+
+
+@app.teardown_request
+def mocking(exception):
+    for job in signatur_fileuploads.values():
+        # remove files
+        job.file = None
+
+        # mock work
+        if job.employment == "00001":
+            job.status = STATUS_CODE.SUCCESS
+            job.message = "File was uploaded successfully"
+        elif job.employment == "00002":
+            job.status = STATUS_CODE.PROCESSING
+            job.message = "Looking for case in SBSYS"
+        elif job.employment == "00003":
+            pass # keep as received or updated
+        elif job.employment == "00004":
+            job.status = STATUS_CODE.FAILED_TRY_AGAIN
+            job.message = "Failed to upload file, try again"
+        elif job.employment == "00005":
+            job.status = STATUS_CODE.FAILED
+            job.message = "Failed to connect to SBSYS"
 
 
 def success_message(success: bool, upload: SignaturFileupload):

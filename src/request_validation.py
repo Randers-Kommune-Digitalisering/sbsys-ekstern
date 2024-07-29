@@ -9,6 +9,14 @@ def is_cpr(cpr):
     return True
 
 
+def is_employment(employment):
+    if not isinstance(employment, str):
+        return False
+    if len(employment) == 5 and employment.isdigit():
+        return True
+    return False
+
+
 def is_pdf(file):
     if isinstance(file, FileStorage):
         return file.mimetype == 'application/pdf' and file.filename.split('.')[-1].lower()  == 'pdf'
