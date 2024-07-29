@@ -72,7 +72,7 @@ def sbsys_journaliser_ansattelse_fil():
                         else:    
                             return generate_response("Not a valid PDF file", status.HTTP_400_BAD_REQUEST)
 
-                    upload.status = STATUS_CODE.UPDATED
+                    upload.status = STATUS_CODE.RECEIVED
                     http_status_code = status.HTTP_200_OK
                     msg = "File updated"
                 else:

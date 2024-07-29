@@ -18,9 +18,8 @@ class STATUS_CODE(Enum):
     FAILED = 0
     FAILED_TRY_AGAIN = 1
     RECEIVED = 2
-    UPDATED = 2
-    PROCESSING = 4
-    SUCCESS = 5
+    PROCESSING = 3
+    SUCCESS = 4
 
 
 class SignaturFileupload:
