@@ -22,7 +22,7 @@ signatur_fileuploads = {}
 
 
 @app.route('/api/journaliser/ansattelse/fil', methods=['POST', 'PUT'])
-@ah.authorization
+#@ah.authorization
 def sbsys_journaliser_ansattelse_fil():
     try:
 
@@ -91,17 +91,25 @@ def sbsys_journaliser_ansattelse_fil():
 
 
 @app.route('/api/journaliser/ansattelse/fil', methods=['GET'])
-@ah.authorization
+#@ah.authorization
 def sbsys_journaliser_ansattelse_fil_status():
-    id = request.args.get('id', None)
-    if id:
-        upload = signatur_fileuploads.get(id)
-        if upload:
-            # TODO: Fix message
-            return generate_response(status.HTTP_202_ACCEPTED, upload)
-        return generate_response("File not found", status.HTTP_404_NOT_FOUND, received_id=id)
-    else:
-        return generate_response("Missing id parameter", status.HTTP_400_BAD_REQUEST)
+    try:
+        id = request.args.get('id', None)
+        if id:
+            upload = signatur_fileuploads.get(id)
+            if upload:
+                # TODO: Fix message
+                msg, status_code = generate_response('', http_code=status.HTTP_202_ACCEPTED, upload=upload)
+                print(f"Status: {msg}")
+                print(f"Status code: {status_code}")
+                return msg, status_code
+            else:
+                return generate_response("File not found", status.HTTP_404_NOT_FOUND, received_id=id)
+        else:
+            return generate_response("Missing id parameter", status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        return generate_response("An unexpected error occurred", status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @app.teardown_request
