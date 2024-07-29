@@ -1,9 +1,49 @@
-import requests, base64, time, logging
+import base64
+import uuid
+import requests
+import base64
+import time
+import logging
 
+from enum import Enum
+
+import http_status as status
 from config import SBSYS_URL, SBSIP_URL, SBSYS_CLIENT_ID, SBSYS_CLIENT_SECRET, SBSYS_USERNAME, SBSYS_PASSWORD
 
 
 logger = logging.getLogger(__name__)
+
+
+class STATUS_CODE(Enum):
+    FAILED = 0
+    FAILED_TRY_AGAIN = 1
+    RECEIVED = 2
+    UPDATED = 2
+    PROCESSING = 4
+    SUCCESS = 5
+
+
+class SignaturFileupload:
+    def __init__(self, file, employment: str, cpr: str):
+        self.file = file
+        self.employment = employment
+        self.cpr = cpr
+        self.id = str(uuid.uuid4())  # Generate a unique ID as a string
+        self.status = STATUS_CODE.RECEIVED  # Set the initial status to RECEIVED
+        self.message = 'File upload received'
+
+    def __repr__(self):
+        return f"<file:{self.file} employment:{self.employment} cpr:{self.cpr} id:{self.id}>"
+
+    def get_id(self):
+        return self.id
+    
+    def get_status(self):
+        return self.status
+    
+    def get_message(self):
+        return self.message
+
 
 # Håndtering af http request
 class APIClient:
@@ -115,3 +155,14 @@ def convert_filestring_to_bytes(file_string):
         # If an error occurs during decoding or validation, return an error message
         print(f"Error decoding base64 string: {e}")
         return None, {"error": "File is not valid. Make sure it is a base64 encoded filestring"}
+
+
+def generate_response(message: str, http_code: int, upload=None, received_id=None):
+    if isinstance(upload, SignaturFileupload):
+        return {"id": upload.get_id(), "status_code": upload.get_status().value, "status_text": upload.get_status().name, "message": upload.get_message()}, http_code
+    elif received_id:
+        return {"id": received_id, "status_code": STATUS_CODE.FAILED.value, "status_text": STATUS_CODE.FAILED.name, "message": message}, http_code
+    else:
+        if http_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
+            return {"id": None, "status_code": STATUS_CODE.FAILED.value, "status_text": STATUS_CODE.FAILED.name, "message": message}, http_code
+        return {"id": None, "status_code": STATUS_CODE.FAILED_TRY_AGAIN.value, "status_text": STATUS_CODE.FAILED_TRY_AGAIN.name, "message": message}, http_code
