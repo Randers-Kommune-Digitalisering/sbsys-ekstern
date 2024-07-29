@@ -22,7 +22,7 @@ signatur_fileuploads = {}
 
 
 @app.route('/api/journaliser/ansattelse/fil', methods=['POST', 'PUT'])
-#@ah.authorization
+@ah.authorization
 def sbsys_journaliser_ansattelse_fil():
     try:
 
@@ -91,7 +91,7 @@ def sbsys_journaliser_ansattelse_fil():
 
 
 @app.route('/api/journaliser/ansattelse/fil', methods=['GET'])
-#@ah.authorization
+@ah.authorization
 def sbsys_journaliser_ansattelse_fil_status():
     id = request.args.get('id', None)
     if id:
