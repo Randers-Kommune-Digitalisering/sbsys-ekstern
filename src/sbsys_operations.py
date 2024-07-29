@@ -32,8 +32,8 @@ class SBSYSOperations:
                 return None
 
             # Filter active cases (SagsStatus Id == 6)
-            active_cases = [case for case in response['Results'] if case['SagsStatus']['Id'] == 6]
-
+            active_cases = [case for case in response['Results'] if case['SagsStatus']['Navn'] == 'Aktiv']
+            
             # Handle no active cases
             if not active_cases:
                 return None
