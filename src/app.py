@@ -21,69 +21,31 @@ app.add_url_rule("/healthz", "healthcheck", view_func=lambda: health.run())
 signatur_fileuploads = {}
 
 
-@app.route('/api/journaliser/ansattelse/fil', methods=['POST', 'PUT'])
-#@ah.authorization
+@app.route('/api/journaliser/ansattelse/fil', methods=['POST'])
+@ah.authorization
 def sbsys_journaliser_ansattelse_fil():
     try:
-
         # Get form data
-        id = request.form.get('id', None)
         cpr = request.form.get('cpr', None)
         employment = request.form.get('employment', None)
         file = request.files.get('file', None)
-        
-        upload = None
-        http_status_code = status.HTTP_201_CREATED
-        msg = "File created"
 
-        if request.method == 'POST':
-            if not (cpr and employment and file):
-                return generate_response("Missing form-data parameter, must contain cpr, employment and file", http_code=status.HTTP_400_BAD_REQUEST)
-            else:
-                if not is_cpr(cpr):
-                    return generate_response("Not a valid cpr number. It must be digits in either 'ddmmyyxxxx' or 'ddmmyy-xxxx' format", status.HTTP_400_BAD_REQUEST)
-
-                if not is_employment(employment):
-                    return generate_response("Employment is not a five digit integer.", status.HTTP_400_BAD_REQUEST)
-
-                if not is_pdf(file):
-                    return generate_response("Not a valid PDF file", status.HTTP_400_BAD_REQUEST)
-                
-                upload = SignaturFileupload(file=file, employment=employment, cpr=cpr)
-                signatur_fileuploads[upload.get_id()] = upload
-
-        elif request.method == 'PUT':
-            if id:
-                upload = signatur_fileuploads.get(id)
-                if upload:
-                    if cpr:
-                        if is_cpr(cpr):
-                            upload.cpr = cpr
-                        else:
-                            return generate_response("Not a valid cpr number. It must be digits in either 'ddmmyyxxxx' or 'ddmmyy-xxxx' format", status.HTTP_400_BAD_REQUEST)
-                    if employment:
-                        if is_employment(employment):
-                            upload.employment = employment
-                        else:
-                            return generate_response("Employment is not a five digit integer.", status.HTTP_400_BAD_REQUEST)
-                    if file:
-                        if is_pdf(file):    
-                            upload.file = file
-                        else:    
-                            return generate_response("Not a valid PDF file", status.HTTP_400_BAD_REQUEST)
-
-                    upload.status = STATUS_CODE.RECEIVED
-                    http_status_code = status.HTTP_200_OK
-                    msg = "File updated"
-                else:
-                    return generate_response("File not found", status.HTTP_404_NOT_FOUND, received_id=id)
-            else:
-                return generate_response("Missing id parameter", status.HTTP_400_BAD_REQUEST)
-
+        if not (cpr and employment and file):
+            return generate_response("Missing form-data parameter, must contain cpr, employment and file", http_code=status.HTTP_400_BAD_REQUEST)
         else:
-            raise Exception("Unsupported HTTP method")
+            if not is_cpr(cpr):
+                return generate_response("Not a valid cpr number. It must be digits in either 'ddmmyyxxxx' or 'ddmmyy-xxxx' format", status.HTTP_400_BAD_REQUEST)
 
-        return generate_response(msg, http_status_code, upload)
+            if not is_employment(employment):
+                return generate_response("Employment is not a five digit integer.", status.HTTP_400_BAD_REQUEST)
+
+            if not is_pdf(file):
+                return generate_response("Not a valid PDF file", status.HTTP_400_BAD_REQUEST)
+            
+            upload = SignaturFileupload(file=file, employment=employment, cpr=cpr)
+            signatur_fileuploads[upload.get_id()] = upload
+
+        return generate_response("File created", status.HTTP_201_CREATED, upload)
 
     except Exception as e:
         print(f"Unexpected error: {e}")
@@ -91,7 +53,7 @@ def sbsys_journaliser_ansattelse_fil():
 
 
 @app.route('/api/journaliser/ansattelse/fil', methods=['GET'])
-#@ah.authorization
+@ah.authorization
 def sbsys_journaliser_ansattelse_fil_status():
     try:
         id = request.args.get('id', None)
