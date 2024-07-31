@@ -7,7 +7,7 @@ import logging
 
 from enum import Enum
 
-import http_status as status
+from threading import Lock
 from config import SBSYS_URL, SBSIP_URL, SBSYS_CLIENT_ID, SBSYS_CLIENT_SECRET, SBSYS_USERNAME, SBSYS_PASSWORD
 
 
@@ -28,8 +28,7 @@ class SignaturFileupload:
         self.employment = employment
         self.cpr = cpr
         self.id = str(uuid.uuid4())  # Generate a unique ID as a string
-        self.status = STATUS_CODE.RECEIVED  # Set the initial status to RECEIVED
-        self.message = 'File upload received'
+        self.set_status(STATUS_CODE.RECEIVED, 'File upload received')  # Set the initial status to RECEIVED
 
     def __repr__(self):
         return f"<file:{self.file} employment:{self.employment} cpr:{self.cpr} id:{self.id}>"
@@ -37,11 +36,18 @@ class SignaturFileupload:
     def get_id(self):
         return self.id
     
-    def get_status(self):
-        return self.status
+    def update_values(self, file, employment, cpr):
+        self.file = file
+        self.employment = employment
+        self.cpr = cpr
+        self.set_status(STATUS_CODE.RECEIVED, 'File upload updated')
     
-    def get_message(self):
-        return self.message
+    def set_status(self, status, message):
+        self.status = status
+        self.message = message
+    
+    def get_status(self):
+        return self.status, self.message
 
 
 # Håndtering af http request
@@ -158,10 +164,9 @@ def convert_filestring_to_bytes(file_string):
 
 def generate_response(message: str, http_code: int, upload=None, received_id=None):
     if isinstance(upload, SignaturFileupload):
-        return {"id": upload.get_id(), "status_code": upload.get_status().value, "status_text": upload.get_status().name, "message": upload.get_message()}, http_code
+        status, message = upload.get_status()
+        return {"id": upload.get_id(), "status_code": status.value, "status_text": status.name, "message": message}, http_code
     elif received_id:
         return {"id": received_id, "status_code": STATUS_CODE.FAILED.value, "status_text": STATUS_CODE.FAILED.name, "message": message}, http_code
     else:
-        if http_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
-            return {"id": None, "status_code": STATUS_CODE.FAILED.value, "status_text": STATUS_CODE.FAILED.name, "message": message}, http_code
-        return {"id": None, "status_code": STATUS_CODE.FAILED_TRY_AGAIN.value, "status_text": STATUS_CODE.FAILED_TRY_AGAIN.name, "message": message}, http_code
+        return {"id": None, "status_code": STATUS_CODE.FAILED.value, "status_text": STATUS_CODE.FAILED.name, "message": message}, http_code

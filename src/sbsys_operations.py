@@ -61,12 +61,12 @@ class SBSYSOperations:
             print("An error occurred in find_personalesag_delforloeb:", e)
             return None
 
-    def journalise_file(self, sag, file, delforloeb_id):
+    def journalise_file(self, sag, file, delforloeb_id, upload_id):
         try:
             sag_id = sag['Id']
             # Call the journalise_file_personalesag method with the JSON data
             json_data = {
-                "json": f'{{"SagID": {sag_id}, "OmfattetAfAktindsigt": true, "DokumentNavn": "E-recruttering - Ansættelsesdata", "DokumentArt": {{"Id": 1}}}}'
+                "json": f'{{"SagID": {sag_id}, "OmfattetAfAktindsigt": true, "DokumentNavn": "E-recruttering - Ansættelsesdata - {upload_id}", "DokumentArt": {{"Id": 1}}}}'
                 # DokumentArt Id 1 = "Indgående" dokument art
             }
 
