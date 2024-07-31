@@ -20,12 +20,14 @@ app.add_url_rule("/healthz", "healthcheck", view_func=lambda: health.run())
 # In-memory collection of SignaturFileupload objects
 signatur_fileuploads = {}
 
+# TODO: Handling of files is not threadsafe, consider using a database or a queue!
 
-@app.route('/api/journaliser/ansattelse/fil', methods=['POST'])
+@app.route('/api/journaliser/ansattelse/fil', methods=['POST', 'PUT'])
 @ah.authorization
 def sbsys_journaliser_ansattelse_fil():
     try:
         # Get form data
+        id = request.form.get('id', None)
         cpr = request.form.get('cpr', None)
         employment = request.form.get('employment', None)
         file = request.files.get('file', None)
@@ -42,10 +44,20 @@ def sbsys_journaliser_ansattelse_fil():
             if not is_pdf(file):
                 return generate_response("Not a valid PDF file", status.HTTP_400_BAD_REQUEST)
             
-            upload = SignaturFileupload(file=file, employment=employment, cpr=cpr)
-            signatur_fileuploads[upload.get_id()] = upload
+            if id:
+                # Fetch Fileupload object with id
+                upload = signatur_fileuploads.get(id)
 
-        return generate_response("File created", status.HTTP_201_CREATED, upload)
+                if upload:
+                    upload.update_values(file=file, employment=employment, cpr=cpr)
+                    return generate_response('', status.HTTP_200_OK, upload)
+                else:
+                    return generate_response("File not found", status.HTTP_404_NOT_FOUND, received_id=id)
+            else:
+                upload = SignaturFileupload(file=file, employment=employment, cpr=cpr)
+                signatur_fileuploads[upload.get_id()] = upload
+
+                return generate_response('', status.HTTP_201_CREATED, upload)
 
     except Exception as e:
         print(f"Unexpected error: {e}")
@@ -61,9 +73,7 @@ def sbsys_journaliser_ansattelse_fil_status():
             upload = signatur_fileuploads.get(id)
             if upload:
                 # TODO: Fix message
-                msg, status_code = generate_response('', http_code=status.HTTP_202_ACCEPTED, upload=upload)
-                print(f"Status: {msg}")
-                print(f"Status code: {status_code}")
+                msg, status_code = generate_response('', http_code=status.HTTP_200_OK, upload=upload)
                 return msg, status_code
             else:
                 return generate_response("File not found", status.HTTP_404_NOT_FOUND, received_id=id)
@@ -77,24 +87,42 @@ def sbsys_journaliser_ansattelse_fil_status():
 @app.teardown_request
 def mocking(exception):
     for job in signatur_fileuploads.values():
-        # remove files
-        job.file = None
 
         # mock work
+        if job.employment == "00000":
+            # Don't touch the job if it has failed, succeeded or is processing - thread safety and reupload issues!
+            if job.status == STATUS_CODE.RECEIVED:
+                job.set_status(STATUS_CODE.PROCESSING, "Looking for case in SBSYS")
+                cpr = job.cpr
+                if cpr not in ["0211223989", "021122-3989"]:
+                    job.set_status(STATUS_CODE.FAILED, "No cases for person")
+                    job.file = None
+                else:
+                    try:
+                        sag = fetch_sag(cpr)  # Just get the newest
+                        if sag:
+                            if journalise_document(sag, job):
+                                job.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
+                        else:
+                            job.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "No case found in SBSYS, try again")
+                            job.file = None
+                    except Exception as e:
+                        print(f"Unexpected error: {e}")
+                        job.set_status(STATUS_CODE.FAILED, "An unexpected error occurred")
         if job.employment == "00001":
-            job.status = STATUS_CODE.SUCCESS
-            job.message = "File was uploaded successfully"
+            job.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
+            job.file = None
         elif job.employment == "00002":
-            job.status = STATUS_CODE.PROCESSING
-            job.message = "Looking for case in SBSYS"
+            job.set_status(STATUS_CODE.PROCESSING, "Looking for case in SBSYS")
+            job.file = None
         elif job.employment == "00003":
-            pass # keep as received or updated
+            pass  # Keep state (RECEIVED)
         elif job.employment == "00004":
-            job.status = STATUS_CODE.FAILED_TRY_AGAIN
-            job.message = "Failed to upload file, try again"
+            job.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "Failed to upload file, try again")
+            job.file = None
         elif job.employment == "00005":
-            job.status = STATUS_CODE.FAILED
-            job.message = "Failed to connect to SBSYS"
+            job.set_status(STATUS_CODE.FAILED, "Failed to connect to SBSYS")
+            job.file = None
 
 
 def success_message(success: bool, upload: SignaturFileupload):
@@ -110,27 +138,27 @@ def fetch_sag(cpr):
 
 
 class JournalisationError(Exception):
-    def __init__(self, reason, status_code, upload):
-        self.reason = reason
-        self.status_code = status_code
-        self.message = success_message(False, upload)
+    pass
 
 
-def journalise_document(sag: object, file, upload):
+def journalise_document(sag: object, upload):
     # For a given sag, save the array of delforloeb
     delforloeb_array = sbsys.find_personalesag_delforloeb(sag)
     if len(delforloeb_array) < 1:
-        raise JournalisationError("Failed to find delforløb, try again", 500, upload)
+        upload.set_status(STATUS_CODE.FAILED, "No delforloeb found for case")
+        return None
 
     delforloeb_object_from_index = delforloeb_array[0]  # Select the first delforloeb object
     delforloeb_id = delforloeb_object_from_index["ID"]  # Save the unique ID of the delforloeb object
 
     # Journalise file
-    response = sbsys.journalise_file(sag, file, delforloeb_id)
+    response = sbsys.journalise_file(sag, upload.file, delforloeb_id, upload.id)
 
     # Check if sag is None
     if response is None:
-        raise JournalisationError("Failed to journalise file, try again", 500, upload)
+        upload.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "Failed to upload file, try again")
+
+    return response
 
 
 if __name__ == "__main__":
