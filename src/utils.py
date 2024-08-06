@@ -23,8 +23,9 @@ class STATUS_CODE(Enum):
 
 
 class SignaturFileupload:
-    def __init__(self, file, employment: str, cpr: str):
+    def __init__(self, file, institutionIdentifier: str, employment: str, cpr: str):
         self.file = file
+        self.institutionIdentifier = institutionIdentifier
         self.employment = employment
         self.cpr = cpr
         self.id = str(uuid.uuid4())  # Generate a unique ID as a string
@@ -36,8 +37,9 @@ class SignaturFileupload:
     def get_id(self):
         return self.id
     
-    def update_values(self, file, employment, cpr):
+    def update_values(self, file, institutionIdentifier, employment, cpr):
         self.file = file
+        self.institutionIdentifier = institutionIdentifier
         self.employment = employment
         self.cpr = cpr
         self.set_status(STATUS_CODE.RECEIVED, 'File upload updated')
