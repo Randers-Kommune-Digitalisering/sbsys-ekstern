@@ -17,6 +17,14 @@ def is_employment(employment):
     return False
 
 
+def is_institution(institution):
+    if not isinstance(institution, str):
+        return False
+    if len(institution) == 2:
+        return True
+    return False
+
+
 def is_pdf(file):
     if isinstance(file, FileStorage):
         return file.mimetype == 'application/pdf' and file.filename.split('.')[-1].lower()  == 'pdf'

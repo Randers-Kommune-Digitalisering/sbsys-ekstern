@@ -5,7 +5,7 @@ import http_status as status
 from sbsys_operations import SBSYSOperations
 from openid_integration import AuthorizationHelper
 from config import DEBUG, KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE
-from request_validation import is_cpr, is_employment, is_pdf, is_timestamp
+from request_validation import is_cpr, is_employment, is_institution, is_pdf, is_timestamp
 from utils import generate_response, STATUS_CODE, SignaturFileupload
 
 app = Flask(__name__)
@@ -30,31 +30,44 @@ def sbsys_journaliser_ansattelse_fil():
         id = request.form.get('id', None)
         cpr = request.form.get('cpr', None)
         employment = request.form.get('employment', None)
+        institutionIdentifier = request.form.get('institutionIdentifier', None)
         file = request.files.get('file', None)
 
-        if not (cpr and employment and file):
-            return generate_response("Missing form-data parameter, must contain cpr, employment and file", http_code=status.HTTP_400_BAD_REQUEST)
+        upload = None
+
+        if not id and not all([cpr,employment, file, institutionIdentifier]):
+            return generate_response("Missing form-data parameter, must contain cpr, institution, employment and file", http_code=status.HTTP_400_BAD_REQUEST)
         else:
+            if id:
+                # Fetch Fileupload object with id
+                upload = signatur_fileuploads.get(id)
+
+                if not upload:
+                    return generate_response("File not found", status.HTTP_404_NOT_FOUND, received_id=id)
+
+                if not any([cpr, employment, institutionIdentifier, file]) and upload:
+                    upload.set_status(STATUS_CODE.RECEIVED, "File upload updated")
+                    return generate_response('', status.HTTP_200_OK, upload)
+                elif not all([cpr, employment, institutionIdentifier, file]) and upload:
+                    return generate_response("Missing form-data parameter, must contain cpr, institution, employment and file", http_code=status.HTTP_400_BAD_REQUEST, received_id=id)
+            
             if not is_cpr(cpr):
                 return generate_response("Not a valid cpr number. It must be digits in either 'ddmmyyxxxx' or 'ddmmyy-xxxx' format", status.HTTP_400_BAD_REQUEST)
 
             if not is_employment(employment):
                 return generate_response("Employment is not a five digit integer.", status.HTTP_400_BAD_REQUEST)
+            
+            if not is_institution(institutionIdentifier):
+                return generate_response("Not a valid PDF file", status.HTTP_400_BAD_REQUEST)
 
             if not is_pdf(file):
                 return generate_response("Not a valid PDF file", status.HTTP_400_BAD_REQUEST)
             
-            if id:
-                # Fetch Fileupload object with id
-                upload = signatur_fileuploads.get(id)
-
-                if upload:
-                    upload.update_values(file=file, employment=employment, cpr=cpr)
-                    return generate_response('', status.HTTP_200_OK, upload)
-                else:
-                    return generate_response("File not found", status.HTTP_404_NOT_FOUND, received_id=id)
+            if upload:
+                upload.update_values(file=file, institutionIdentifier=institutionIdentifier, employment=employment, cpr=cpr)
+                return generate_response('', status.HTTP_200_OK, upload)
             else:
-                upload = SignaturFileupload(file=file, employment=employment, cpr=cpr)
+                upload = SignaturFileupload(file=file, institutionIdentifier=institutionIdentifier, employment=employment, cpr=cpr)
                 signatur_fileuploads[upload.get_id()] = upload
 
                 return generate_response('', status.HTTP_201_CREATED, upload)
