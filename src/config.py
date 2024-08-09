@@ -19,3 +19,10 @@ SBSYS_CLIENT_ID = os.environ["SBSYS_CLIENT_ID"].strip()
 SBSYS_CLIENT_SECRET = os.environ["SBSYS_CLIENT_SECRET"].strip()
 SBSYS_USERNAME = os.environ["SBSYS_USERNAME"].strip()
 SBSYS_PASSWORD = os.environ["SBSYS_PASSWORD"].strip()
+
+# Database
+DB_NAME = os.environ["DB_NAME"].strip()
+DB_USER = os.environ["DB_USER"].strip()
+DB_PASSWORD = os.environ["DB_PASSWORD"].strip()
+DB_HOST = os.environ["DB_HOST"].strip()
+DB_PORT = os.environ["DB_PORT"].strip()
