@@ -1,55 +1,13 @@
 import base64
-import uuid
 import requests
 import base64
 import time
 import logging
 
-from enum import Enum
-
-from threading import Lock
 from config import SBSYS_URL, SBSIP_URL, SBSYS_CLIENT_ID, SBSYS_CLIENT_SECRET, SBSYS_USERNAME, SBSYS_PASSWORD
-
+from database import SignaturFileupload, STATUS_CODE
 
 logger = logging.getLogger(__name__)
-
-
-class STATUS_CODE(Enum):
-    FAILED = 0
-    FAILED_TRY_AGAIN = 1
-    RECEIVED = 2
-    PROCESSING = 3
-    SUCCESS = 4
-
-
-class SignaturFileupload:
-    def __init__(self, file, institutionIdentifier: str, employment: str, cpr: str):
-        self.file = file
-        self.institutionIdentifier = institutionIdentifier
-        self.employment = employment
-        self.cpr = cpr
-        self.id = str(uuid.uuid4())  # Generate a unique ID as a string
-        self.set_status(STATUS_CODE.RECEIVED, 'File upload received')  # Set the initial status to RECEIVED
-
-    def __repr__(self):
-        return f"<file:{self.file} employment:{self.employment} cpr:{self.cpr} id:{self.id}>"
-
-    def get_id(self):
-        return self.id
-    
-    def update_values(self, file, institutionIdentifier, employment, cpr):
-        self.file = file
-        self.institutionIdentifier = institutionIdentifier
-        self.employment = employment
-        self.cpr = cpr
-        self.set_status(STATUS_CODE.RECEIVED, 'File upload updated')
-    
-    def set_status(self, status, message):
-        self.status = status
-        self.message = message
-    
-    def get_status(self):
-        return self.status, self.message
 
 
 # Håndtering af http request
