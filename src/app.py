@@ -1,25 +1,34 @@
 from flask import Flask, request
 from healthcheck import HealthCheck
+from datetime import datetime
 
+import logging
 import http_status as status
 from sbsys_operations import SBSYSOperations
 from openid_integration import AuthorizationHelper
 from database import DatabaseClient, Base, SignaturFileupload, FileObject
-from config import DEBUG, KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE, DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER
+from config import DEBUG, KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE, DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER, SD_URL, SD_USERNAME, SD_PASSWORD
 from request_validation import is_cpr, is_employment, is_institution, is_pdf, is_timestamp
 from utils import generate_response, STATUS_CODE#, SignaturFileupload
+from sd.sd_client import SDClient
+from browserless import browserless_sd_personalesag_files
 
 app = Flask(__name__)
 health = HealthCheck()
 ah = AuthorizationHelper(KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE)
 sbsys = SBSYSOperations()
+sd_client = SDClient(username=SD_USERNAME, password=SD_PASSWORD, url=SD_URL)
 db_client = DatabaseClient('postgresql', DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT)
+logger = logging.getLogger(__name__)
+
 
 app.add_url_rule("/healthz", "healthcheck", view_func=lambda: health.run())
 
 # Set up the database
 Base.metadata.create_all(db_client.get_engine())
 
+# In-memory institutions and departments
+institutions_and_departments = None
 
 @app.route('/api/journaliser/ansattelse/fil', methods=['POST', 'PUT'])
 @ah.authorization
@@ -154,8 +163,280 @@ def fetch_sag(cpr):
     return sbsys.find_newest_personalesag({"cpr": cpr, "sagType": {"Id": 5}})
 
 
+def fetch_personalesag(cpr, employment_identifier, institution_identifier):
+    global institutions_and_departments
+
+    # Check if institutions_and_departments has been initialized
+    if not institutions_and_departments:
+        # Fetch institutions and departments if not already in memory
+        institutions_and_departments = sd_client.fetch_institutions_and_departments("9R")
+
+    # Use the in-memory institutions_and_departments to find the personalesag
+    return find_personalesag_by_sd_employment(
+        cpr=cpr,
+        employment_identifier=employment_identifier,
+        inst_code=institution_identifier,
+        institutions_and_departments=institutions_and_departments
+    )
+
+def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, inst_code: str, institutions_and_departments: list):
+    # Fetch SD employment
+    employment = sd_client.GetEmployment20111201(cpr=cpr, employment_identifier=employment_identifier, inst_code=inst_code)
+    if not employment:
+        logger.warning(f"No employment found with cpr: {cpr}, employment_identifier: {employment_identifier}, or inst_code: {inst_code}")
+        return None
+
+    employment_location_code = employment.get('EmploymentDepartment', None).get('DepartmentIdentifier', None)
+    if not employment_location_code:
+        logger.warning(f"No department identifier found with cpr: {cpr}, employment_identifier: {employment_identifier}, and inst_code: {inst_code}")
+        return None
+
+    if not institutions_and_departments:
+        logger.warning(f"No institutions_and_departments were found on region code 9R")
+        return None
+
+    # Fetch the person active personalesager
+    sager = sbsys.fetch_active_personalesager(cpr)
+
+    if not sager:
+        logger.warning(f"No sag found with cpr: {cpr}")
+        return
+
+    # Go through sager and compare ansaettelsessted from sag to DepartmentCode from SD employment
+    for sag in sager:
+        break
+        matched_sag = compare_sag_ansaettelssted(sag, employment, institutions_and_departments)
+        if matched_sag:
+            return matched_sag
+
+    input_strings = [f'{cpr} {employment_identifier}']
+    sd_employment_files = fetch_sd_employment_files(input_strings)
+    write_json('files/files_match_result/sd_files_result.json', sd_employment_files)
+
+    if not sd_employment_files:
+        logger.warning("sd_employment_files is None")
+        return None
+
+    sd_file_result = sd_employment_files.get('allResults', None)
+    if not sd_file_result:
+        logger.warning("sd_file_result is None")
+        return None
+
+    if not len(sd_file_result) == 1:
+        logger.warning(f"sd_file_result has a length of '{len(sd_file_result)}', but it should have a length of '1'")
+        return None
+
+    # Select the first element of the list with one element
+    sd_file_result = sd_file_result[0]
+    # Check if result is empty
+    if not sd_file_result['result']:
+        # Go through sager and compare ansaettelsessted from sag to DepartmentCode from SD employment
+        for sag in sager:
+            matched_sag = compare_sag_ansaettelssted(sag, employment, institutions_and_departments)
+            if matched_sag:
+              return matched_sag
+
+    # Go through sager and compare file name and archive date with personalesag in SD
+    for sag in sager:
+        sag_id = sag.get('Id', None)
+
+        if not sag_id:
+            logger.info(f"sag_id is None - No sag id found for sag with cpr: {cpr}")
+            continue
+
+        # Fetch the files from given delforloeb in current sag
+        matched_sag = compare_sag_and_results(sd_file_result, sag)
+        if not matched_sag:
+            continue
+
+        # logger.debug(matched_sag)
+        return matched_sag
+
+    return None
+
+
+def compare_sag_ansaettelssted(sag: dict, employment, institutions_and_departments):
+    sag_id = sag.get('Id', None)
+
+    if not sag_id:
+        logger.warning(f"sag_id is None - No sag id found in compare_sag_ansaettelssted")
+        return None
+
+    sag_employment_location = sag.get('Ansaettelsessted', None).get('Navn', None)
+    if not sag_employment_location:
+        logger.info(f"sag_employment_location is None - No Ansaettelsessted found on sag id: {sag_id}")
+        return None
+
+    department_codes = find_department_codes(institutions_and_departments, sag_employment_location)
+    if not department_codes:
+        logger.info(
+            f"department_codes is None - sag with id: {sag_id} {sag_employment_location} does not correspond with any SD departments")
+        return None
+
+    # Compare the sag_employment_location from personalesag to departmentname
+    employment_location_match_list = filter_employment_by_department([employment],
+                                                                     department_codes['DepartmentCodes'], sag_id,
+                                                                     sag_employment_location)
+    if len(employment_location_match_list) == 1 and employment_location_match_list[0]['MatchData']:
+        logger.info(f"Match found for ansaettelsessted between employment_identifier, and sag_id: "
+                    f"{employment_location_match_list[0].get('EmploymentIdentifier', None)}"
+                    f", {sag_id}")
+        return sag
+    elif len(employment_location_match_list) > 1:
+        logger.warning(
+            f"employment_location_match_list has a length of: {len(employment_location_match_list)} - It should have a legth of one, since there is only one employment")
+    else:
+        return None
+        logger.debug(
+            f"No personalesag match found for employment_identifier, and employment_department: {employment.get('EmploymentIdentifier', None)},"
+            f" {employment.get('EmploymentDepartment', None).get('DepartmentIdentifier', None)}"
+            f" \nFound sag with id, and location: {sag_id}, {sag_employment_location} - Which has department code {department_codes['DepartmentCodes']}")
+    return None
+
+
+def compare_sag_and_results(sd_result: dict, sag: dict):
+    sag_id = sag.get('Id', None)
+    if not sag_id:
+        logger.warning("compare_sag_and_results received None sag_id")
+        return None
+
+    if not sd_result:
+        logger.warning("compare_sag_and_results received None sd_result")
+        return None
+
+    # Fetch the files from given delforloeb in current sag
+    sag_documents = sbsys.fetch_delforloeb_files(sag_id=sag_id, delforloeb_title="01 Ansættelse",
+                                              allowed_filetypes=[], document_keywords=[])
+
+    if not sag_documents:
+        logger.info(f"sag with id: {sag_id} has no documents")
+        return None
+
+    logger.info(f"Comparing for inputString: {sd_result['inputString']}")
+
+    all_match = True  # Assume all documents will match initially
+
+    for document in sag_documents:
+        try:
+            # Convert RegistreringsDato to the same format as arkivdato for comparison
+            registrerings_dato = datetime.strptime(document['RegistreringsDato'], "%Y-%m-%dT%H:%M:%S.%f%z").strftime(
+                "%d.%m.%Y")
+        except ValueError:
+            # Handle cases where there might be no microseconds
+            registrerings_dato = datetime.strptime(document['RegistreringsDato'], "%Y-%m-%dT%H:%M:%S%z").strftime("%d.%m.%Y")
+
+        # Remove excess whitespace in document Navn
+        sag_navn = ' '.join(document['Navn'].split())
+
+        # Check if there's any item in sd_result that matches both navn and arkivdato
+        match_found = False
+        for item in sd_result['result']:
+            if item['navn'] == sag_navn and item['arkivdato'] == registrerings_dato:
+                # logger.info(f"Match found: {item} for sag: {sag_id}")
+                match_found = True
+                break
+
+        if not match_found:
+            # logger.info(f"No match found for document {document} in sag: {sag_id}")
+            all_match = False
+            break  # If any document doesn't match, we can stop the comparison
+
+    return sag if all_match else None
+
+
+def find_department_codes(inst_list: list, sag_employment_location: str):
+    def recursive_search(department):
+        if isinstance(department, list):
+            codes = []
+            for dept in department:
+                result = recursive_search(dept)
+                if result:
+                    codes.extend(result['DepartmentCodes'])
+            return {
+                'DepartmentCodeName': sag_employment_location,
+                'DepartmentCodes': list(set(codes))  # Ensure unique codes
+            } if codes else None
+        elif isinstance(department, dict):
+            codes = []
+            department_name = department.get('DepartmentName', '')
+            # Ensure department_name is a string and not None
+            if isinstance(department_name, str):
+                # Check for partial match with full string
+                if sag_employment_location in department_name:
+                    codes.append(department.get('DepartmentIdentifier'))
+                # Check if DepartmentCodeName is exactly 30 characters
+                if len(department_name) == 30 and sag_employment_location.startswith(department_name):
+                    codes.append(department.get('DepartmentIdentifier'))
+            # Recursively search within nested departments
+            if 'Department' in department and department['Department'] is not None:
+                result = recursive_search(department['Department'])
+                if result:
+                    codes.extend(result['DepartmentCodes'])
+            return {
+                'DepartmentCodeName': sag_employment_location,
+                'DepartmentCodes': list(set(codes))  # Ensure unique codes
+            } if codes else None
+        return None
+
+    all_codes = []
+    for institution in inst_list:
+        result = recursive_search(institution.get('Department', {}))
+        if result:
+            all_codes.append(result)
+
+    # Combine results for the same department name
+    combined_results = {}
+    for item in all_codes:
+        if item['DepartmentCodeName'] in combined_results:
+            combined_results[item['DepartmentCodeName']]['DepartmentCodes'].extend(item['DepartmentCodes'])
+            combined_results[item['DepartmentCodeName']]['DepartmentCodes'] = list(
+                set(combined_results[item['DepartmentCodeName']]['DepartmentCodes']))
+        else:
+            combined_results[item['DepartmentCodeName']] = item
+
+    # Convert combined results to a list
+    result_list = list(combined_results.values())
+
+    # Return a single object if there is exactly one match, otherwise return the list
+    if len(result_list) == 1:
+        return result_list[0]
+    return result_list
+
+
+def filter_employment_by_department(employment_list, department_code_list, sag_id, department_name):
+    filtered_employment = []
+    for department_code in department_code_list:
+        for employment in employment_list:
+            if employment.get('EmploymentDepartment', {}).get('DepartmentIdentifier') == department_code:
+                employment['MatchData'] = {
+                    'SagId': sag_id,
+                    'DepartmentName': department_name,
+                    'DepartmentCode': department_code
+                }
+                filtered_employment.append(employment)
+    return filtered_employment
+
+
+def fetch_sd_employment_files(input_strings: list):
+    try:
+        # Make the request and get the response
+        response = browserless_sd_personalesag_files(input_strings)
+
+        # Check if the response status code is 200
+        if response.status_code == 200:
+            # Return the content if the status is 200
+            return response.json()  # Assuming the content is JSON
+        else:
+            # Handle the error case (you can raise an exception or return an error message)
+            raise Exception(f"Request failed with status code: {response.status_code}")
+    except Exception as e:
+        logger.error(f"fetch_sd_employment_files error: {e}")
+        return None
+
+
 class JournalisationError(Exception):
     pass
+
 
 
 def journalise_document(sag: object, upload):

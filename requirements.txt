@@ -6,3 +6,5 @@ requests
 python-dotenv
 py-healthcheck
 SQLAlchemy
+BeautifulSoup
+xmltodict
