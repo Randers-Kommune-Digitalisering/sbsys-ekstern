@@ -4,7 +4,6 @@ import requests
 import xmltodict
 import json
 from datetime import datetime
-from bs4 import BeautifulSoup
 from requests.auth import HTTPBasicAuth
 from typing import Dict, Tuple, Optional
 from base_api_client import BaseAPIClient
@@ -56,14 +55,7 @@ class SDAPIClient(BaseAPIClient):
 
             # Check if the response is HTML or XML
             if 'text/html' in content_type:
-                soup = BeautifulSoup(response.content, 'html.parser')
-                if not soup:
-                    logger.info("Received a non-HTML response that cannot be parsed for closure details.")
-                else:
-                    title = soup.title.string if soup.title else 'No title'
-                    message = soup.find(id='js_txt').text if soup.find(id='js_txt') else 'No specific message found.'
-                    logger.info(f"API is closed. Title: {title}, Message: {message}")
-                    return None
+                return None
             elif 'application/xml' in content_type or 'text/xml' in content_type:
                 # Handle XML response
                 try:
@@ -186,6 +178,7 @@ class SDClient:
             params = {
                 'RegionIdentifier': region_identifier
             }
+            logger.info("Fetching SD institutions...")
             response = self.post_request(path=path, params=params)
 
             if not response:
@@ -206,10 +199,11 @@ class SDClient:
                 logger.warning("Institution list not found")
                 return None
             inst_list = region['Institution']
-
+            logger.info("Fetching SD institutions success")
             # Get departments
             path = 'GetDepartment20080201'
             date_today = datetime.now().strftime('%d.%m.%Y')
+            logger.info("Fetching SD departments...")
             for inst in inst_list:
                 institution_identifier = inst.get('InstitutionIdentifier', None)
                 institution_name = inst.get('InstitutionName', None)
@@ -225,7 +219,7 @@ class SDClient:
                     'DepartmentNameIndicator': 'true'
                 }
 
-                response = sd_client.post_request(path=path, params=params)
+                response = self.post_request(path=path, params=params)
 
                 if not response:
                     logger.warning("No response from SD client")
@@ -244,11 +238,57 @@ class SDClient:
                                      'InstitutionName': institution_name,
                                      'Department': department_list}
                 inst_and_dep.append(inst_and_dep_dict)
+            logger.info("Fetching SD departments success")
             return inst_and_dep
 
         except Exception as e:
             logger.error(f"Error while fetching inst and departments: {e} \n"
                          f"Region code: {region_identifier}")
+            return []
+
+    def fetch_departments(self, inst_identifier):
+        inst_and_dep = []
+        try:
+            # Get departments
+            path = 'GetDepartment20080201'
+            date_today = datetime.now().strftime('%d.%m.%Y')
+            logger.info("Fetching SD departments...")
+
+            if not inst_identifier:
+                logger.warning("InstitutionIdentifier is None")
+                return
+            # Define the SD params
+            params = {
+                'InstitutionIdentifier': inst_identifier,
+                'ActivationDate': date_today,
+                'DeactivationDate': date_today,
+                'DepartmentNameIndicator': 'true'
+            }
+
+            response = self.post_request(path=path, params=params)
+
+            if not response:
+                logger.warning("No response from SD client")
+                return None
+
+            if not response['GetDepartment20080201']:
+                logger.warning("GetDepartment20080201 object not found")
+                return None
+
+            if not response['GetDepartment20080201']['Department']:
+                logger.warning("Department list not found")
+                return None
+            department_list = response['GetDepartment20080201']['Department']
+
+            inst_and_dep_dict = {'InstitutionIdentifier': inst_identifier,
+                                 'Department': department_list}
+            inst_and_dep.append(inst_and_dep_dict)
+            logger.info("Fetching SD departments success")
+            return inst_and_dep
+
+        except Exception as e:
+            logger.error(f"Error while fetching inst and departments: {e} \n"
+                         f"Institution identifier: {inst_identifier}")
             return []
 
 
