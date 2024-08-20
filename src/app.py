@@ -13,7 +13,7 @@ from utils import generate_response, STATUS_CODE#, SignaturFileupload
 from sd.sd_client import SDClient
 from browserless import browserless_sd_personalesag_files
 
-app = Flask(__name__)
+
 health = HealthCheck()
 ah = AuthorizationHelper(KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE)
 sbsys = SBSYSOperations()
@@ -22,13 +22,19 @@ db_client = DatabaseClient('postgresql', DB_NAME, DB_USER, DB_PASSWORD, DB_HOST,
 logger = logging.getLogger(__name__)
 
 
-app.add_url_rule("/healthz", "healthcheck", view_func=lambda: health.run())
-
 # Set up the database
 Base.metadata.create_all(db_client.get_engine())
 
-# In-memory institutions and departments
-institutions_and_departments = None
+
+def create_app():
+
+    app = Flask(__name__)
+    app.add_url_rule("/healthz", "healthcheck", view_func=lambda: health.run())
+    return app
+
+
+app = create_app()
+
 
 @app.route('/api/journaliser/ansattelse/fil', methods=['POST', 'PUT'])
 @ah.authorization
@@ -164,22 +170,14 @@ def fetch_sag(cpr):
 
 
 def fetch_personalesag(cpr, employment_identifier, institution_identifier):
-    global institutions_and_departments
 
-    # Check if institutions_and_departments has been initialized
-    if not institutions_and_departments:
-        # Fetch institutions and departments if not already in memory
-        institutions_and_departments = sd_client.fetch_institutions_and_departments("9R")
-
-    # Use the in-memory institutions_and_departments to find the personalesag
     return find_personalesag_by_sd_employment(
         cpr=cpr,
         employment_identifier=employment_identifier,
         inst_code=institution_identifier,
-        institutions_and_departments=institutions_and_departments
     )
 
-def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, inst_code: str, institutions_and_departments: list):
+def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, inst_code: str):
     # Fetch SD employment
     employment = sd_client.GetEmployment20111201(cpr=cpr, employment_identifier=employment_identifier, inst_code=inst_code)
     if not employment:
@@ -190,6 +188,8 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
     if not employment_location_code:
         logger.warning(f"No department identifier found with cpr: {cpr}, employment_identifier: {employment_identifier}, and inst_code: {inst_code}")
         return None
+
+    institutions_and_departments = sd_client.fetch_departments(inst_identifier=inst_code)
 
     if not institutions_and_departments:
         logger.warning(f"No institutions_and_departments were found on region code 9R")
@@ -204,14 +204,12 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
 
     # Go through sager and compare ansaettelsessted from sag to DepartmentCode from SD employment
     for sag in sager:
-        break
         matched_sag = compare_sag_ansaettelssted(sag, employment, institutions_and_departments)
         if matched_sag:
             return matched_sag
 
     input_strings = [f'{cpr} {employment_identifier}']
     sd_employment_files = fetch_sd_employment_files(input_strings)
-    write_json('files/files_match_result/sd_files_result.json', sd_employment_files)
 
     if not sd_employment_files:
         logger.warning("sd_employment_files is None")
@@ -438,7 +436,6 @@ class JournalisationError(Exception):
     pass
 
 
-
 def journalise_document(sag: object, upload):
     # For a given sag, save the array of delforloeb
     delforloeb_array = sbsys.find_personalesag_delforloeb(sag)
@@ -458,6 +455,7 @@ def journalise_document(sag: object, upload):
 
     return response
 
+
 @app.route('/test', methods=['GET'])
 def test():
     db_client.execute_sql("""
@@ -472,4 +470,5 @@ def test():
 
 
 if __name__ == "__main__":
-    app.run(debug=DEBUG, host='0.0.0.0', port=8080)
+    print(fetch_personalesag("REMOVED", "13263", "RG"))
+    # app.run(debug=DEBUG, host='0.0.0.0', port=8080)

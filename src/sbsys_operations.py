@@ -76,7 +76,7 @@ class SBSYSOperations:
                     "CprNummer": cpr
                 }
             }
-            response = self.client.sag_search(payload)
+            response = self.client.search_cases(payload)
 
             if not response:
                 logger.info(f"sag_search response is None - No sager found for cpr: {cpr}")
