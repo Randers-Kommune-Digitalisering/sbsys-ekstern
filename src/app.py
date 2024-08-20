@@ -470,5 +470,5 @@ def test():
 
 
 if __name__ == "__main__":
-    print(fetch_personalesag("2003951483", "13263", "RG"))
-    # app.run(debug=DEBUG, host='0.0.0.0', port=8080)
+    # print(fetch_personalesag("2003951483", "13263", "RG"))
+    app.run(debug=DEBUG, host='0.0.0.0', port=8080)
