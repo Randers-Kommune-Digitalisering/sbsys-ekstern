@@ -100,10 +100,27 @@ class SBSYSClient:
         path = "api/sag/" + str(sag["Id"]) + "/delforloeb"
         return self.api_client.get(path)
 
+    def get_request(self, path):
+        return self.api_client.get(path)
+
+    def post_request(self, path, data=None, json=None):
+        return self.api_client.post(path, data, json)
+
+    def put_request(self, path, data=None, json=None):
+        return self.api_client.put(path, data, json)
+
+    def delete_request(self, path):
+        return self.api_client.delete(path)
+
     # journaliser fil
     def journalise_file_personalesag(self, data, files, delforloeb_id):
         path = "api/dokument/journaliser/" + str(delforloeb_id)        
         return self.api_client.post_upload(path, data=data, files=files)
+
+    def fetch_documents(self, sag_id):
+        path = f"api/sag/{sag_id}/dokumenter"
+        return self.api_client.get(path=path)
+
     
 # Convert a base64 encoded string to file
 def convert_filestring_to_bytes(file_string):
