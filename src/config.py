@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-DEBUG = os.environ["DEBUG"].strip()
+DEBUG = os.getenv('DEBUG', 'False') in ['True', 'true']
 
 # Keycloak
 KEYCLOAK_URL = os.environ["KEYCLOAK_URL"].strip()
