@@ -97,7 +97,7 @@ class DatabaseClient:
 
     def get_next_signatur_file_upload(self, session):
         try:
-            upload = session.query(SignaturFileupload).filter(SignaturFileupload.status == STATUS_CODE.RECEIVED).with_for_update().first()
+            upload = session.query(SignaturFileupload).filter(SignaturFileupload.status == STATUS_CODE.RECEIVED).order_by(SignaturFileupload.updated_at.asc()).with_for_update().first()
             if upload:
                 upload.status = STATUS_CODE.PROCESSING
             session.commit()
