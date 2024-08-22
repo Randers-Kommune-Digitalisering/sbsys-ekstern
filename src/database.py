@@ -95,6 +95,15 @@ class DatabaseClient:
         except Exception as e:
             self.logger.error(f"Error getting object from database: {e}")
 
+    def get_next_signatur_file_upload(self, session):
+        try:
+            upload = session.query(SignaturFileupload).filter(SignaturFileupload.status == STATUS_CODE.RECEIVED).order_by(SignaturFileupload.updated_at.asc()).with_for_update().first()
+            if upload:
+                upload.status = STATUS_CODE.PROCESSING
+            session.commit()
+            return upload
+        except Exception as e:
+            self.logger.error(f"Error getting object from database: {e}")
 
 
 class Base(DeclarativeBase):

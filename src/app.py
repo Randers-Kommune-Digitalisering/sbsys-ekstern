@@ -2,17 +2,22 @@ from flask import Flask, request
 from healthcheck import HealthCheck
 from datetime import datetime
 
+import sys
+import atexit
+import signal
 import logging
+import threading
 import http_status as status
 from sbsys_operations import SBSYSOperations
 from openid_integration import AuthorizationHelper
-from database import DatabaseClient, Base, SignaturFileupload, FileObject
+from database import DatabaseClient, Base, SignaturFileupload  # , FileObject
 from config import DEBUG, KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE, DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER, SD_URL, SD_USERNAME, SD_PASSWORD
-from request_validation import is_cpr, is_employment, is_institution, is_pdf, is_timestamp
-from utils import generate_response, STATUS_CODE#, SignaturFileupload
+from request_validation import is_cpr, is_employment, is_institution, is_pdf  # , is_timestamp
+from utils import set_logging_configuration, generate_response, STATUS_CODE  # , SignaturFileupload
 from sd.sd_client import SDClient
 from browserless import browserless_sd_personalesag_files
 
+set_logging_configuration()
 
 health = HealthCheck()
 ah = AuthorizationHelper(KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE)
@@ -56,10 +61,15 @@ def sbsys_journaliser_ansattelse_fil():
                 if id:
                     # Fetch Fileupload object with id
                     upload = db_client.get_signatur_file_upload(session, id)
-                    # upload = signatur_fileuploads.get(id)
 
                     if not upload:
                         return generate_response("File not found", status.HTTP_404_NOT_FOUND, received_id=id)
+                    
+                    if upload.status == STATUS_CODE.SUCCESS:
+                        return generate_response("File has already been uploaded", status.HTTP_400_BAD_REQUEST, received_id=id)
+                    
+                    if upload.status == STATUS_CODE.PROCESSING:
+                        return generate_response("File is being processed", status.HTTP_400_BAD_REQUEST, received_id=id)
 
                     if not any([cpr, employment, institutionIdentifier, file]) and upload:
                         upload.set_status(STATUS_CODE.RECEIVED, "File upload updated")
@@ -86,13 +96,10 @@ def sbsys_journaliser_ansattelse_fil():
                     return generate_response('', status.HTTP_200_OK, upload)
                 else:
                     upload = SignaturFileupload(file=file, institutionIdentifier=institutionIdentifier, employment=employment, cpr=cpr)
-                    if  db_client.add_object(session, upload):
+                    if db_client.add_object(session, upload):
                         return generate_response('', status.HTTP_201_CREATED, upload)
                     else:
                         raise Exception("Unexpected error occurred")
-                    
-                    #signatur_fileuploads[upload.get_id()] = upload
-                    #return generate_response('', status.HTTP_201_CREATED, upload)
 
     except Exception as e:
         print(f"Unexpected error: {e}")
@@ -121,40 +128,40 @@ def sbsys_journaliser_ansattelse_fil_status():
         return generate_response("An unexpected error occurred", status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@app.teardown_request
-def mocking(exception):
-    with db_client.get_session() as session:
-        for job in db_client.get_all_signatur_file_uploads(session):
-            # mock work
-            if job.employment == "00000":
-                # Don't touch the job if it has failed, succeeded or is processing - thread safety and reupload issues!
-                if job.status == STATUS_CODE.RECEIVED:
-                    job.set_status(STATUS_CODE.PROCESSING, "Looking for case in SBSYS")
-                    cpr = job.cpr
-                    if cpr not in ["0211223989", "021122-3989"]:
-                        job.set_status(STATUS_CODE.FAILED, "No cases for person")
-                    else:
-                        try:
-                            sag = fetch_sag(cpr)  # Just get the newest
-                            if sag:
-                                if journalise_document(sag, job):
-                                    job.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
-                            else:
-                                job.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "No case found in SBSYS, try again")
-                        except Exception as e:
-                            print(f"Unexpected error: {e}")
-                            job.set_status(STATUS_CODE.FAILED, "An unexpected error occurred")
-            if job.employment == "00001":
-                job.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
-            elif job.employment == "00002":
-                job.set_status(STATUS_CODE.PROCESSING, "Looking for case in SBSYS")
-            elif job.employment == "00003":
-                pass  # Keep state (RECEIVED)
-            elif job.employment == "00004":
-                job.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "Failed to upload file, try again")
-            elif job.employment == "00005":
-                job.set_status(STATUS_CODE.FAILED, "Failed to connect to SBSYS")
-        session.commit()
+# @app.teardown_request
+# def mocking(exception):
+#     with db_client.get_session() as session:
+#         for job in db_client.get_all_signatur_file_uploads(session):
+#             # mock work
+#             if job.employment == "00000":
+#                 # Don't touch the job if it has failed, succeeded or is processing - thread safety and reupload issues!
+#                 if job.status == STATUS_CODE.RECEIVED:
+#                     job.set_status(STATUS_CODE.PROCESSING, "Looking for case in SBSYS")
+#                     cpr = job.cpr
+#                     if cpr not in ["0211223989", "021122-3989"]:
+#                         job.set_status(STATUS_CODE.FAILED, "No cases for person")
+#                     else:
+#                         try:
+#                             sag = fetch_sag(cpr)  # Just get the newest
+#                             if sag:
+#                                 if journalise_document(sag, job):
+#                                     job.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
+#                             else:
+#                                 job.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "No case found in SBSYS, try again")
+#                         except Exception as e:
+#                             print(f"Unexpected error: {e}")
+#                             job.set_status(STATUS_CODE.FAILED, "An unexpected error occurred")
+#             if job.employment == "00001":
+#                 job.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
+#             elif job.employment == "00002":
+#                 job.set_status(STATUS_CODE.PROCESSING, "Looking for case in SBSYS")
+#             elif job.employment == "00003":
+#                 pass  # Keep state (RECEIVED)
+#             elif job.employment == "00004":
+#                 job.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "Failed to upload file, try again")
+#             elif job.employment == "00005":
+#                 job.set_status(STATUS_CODE.FAILED, "Failed to connect to SBSYS")
+#         session.commit()
 
 
 def success_message(success: bool, upload: SignaturFileupload):
@@ -232,7 +239,7 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
         for sag in sager:
             matched_sag = compare_sag_ansaettelssted(sag, employment, institutions_and_departments)
             if matched_sag:
-              return matched_sag
+                return matched_sag
 
     # Go through sager and compare file name and archive date with personalesag in SD
     for sag in sager:
@@ -456,19 +463,42 @@ def journalise_document(sag: object, upload):
     return response
 
 
-@app.route('/test', methods=['GET'])
-def test():
-    db_client.execute_sql("""
-         CREATE TABLE IF NOT EXISTS cars (
-         brand VARCHAR(255),
-         model VARCHAR(255),
-         year INT
-    );""")
-    db_client.execute_sql("INSERT INTO cars (brand, model, year) VALUES ('bil', 'cool', 2000)")
-    res = db_client.execute_sql('SELECT * FROM cars')
-    return str(res.fetchall()), 200
+worker_stop_event = threading.Event()
+
+
+def worker_job():
+    logger = logging.getLogger('worker_thread')
+    logger.info("Worker started")
+    while not worker_stop_event.is_set():
+        with db_client.get_session() as sess:
+            upload_file = db_client.get_next_signatur_file_upload(sess)
+            if upload_file:
+                sag = fetch_personalesag(upload_file.cpr, upload_file.employment, upload_file.institutionIdentifier)
+                if sag:
+                    if journalise_document(sag, upload_file):
+                        upload_file.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
+                else:
+                    upload_file.set_status(STATUS_CODE.FAILED, "No case found in SBSYS")
+            sess.commit()
+    logger.info("Worker stopped")
+
+
+worker = threading.Thread(target=worker_job)
+
+
+def stop_worker():
+    global worker, worker_stop_event
+    worker_stop_event.set()
+    worker.join()
+
+
+def shutdown_server(sig, frame):
+    stop_worker()
+    sys.exit(0)
 
 
 if __name__ == "__main__":
-    # print(fetch_personalesag("2003951483", "13263", "RG"))
+    worker.start()
+    atexit.register(stop_worker)
+    signal.signal(signal.SIGINT, shutdown_server)
     app.run(debug=DEBUG, host='0.0.0.0', port=8080)
