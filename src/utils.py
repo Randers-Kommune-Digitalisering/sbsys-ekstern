@@ -1,13 +1,19 @@
 import base64
 import requests
 import base64
+import sys
 import time
 import logging
 
-from config import SBSYS_URL, SBSIP_URL, SBSYS_CLIENT_ID, SBSYS_CLIENT_SECRET, SBSYS_USERNAME, SBSYS_PASSWORD
+from config import SBSYS_URL, SBSIP_URL, SBSYS_CLIENT_ID, SBSYS_CLIENT_SECRET, SBSYS_USERNAME, SBSYS_PASSWORD, DEBUG
 from database import SignaturFileupload, STATUS_CODE
 
 logger = logging.getLogger(__name__)
+
+
+def set_logging_configuration():
+    log_level = logging.DEBUG if DEBUG else logging.INFO
+    logging.basicConfig(stream=sys.stdout, level=log_level, format='[%(asctime)s] %(levelname)s - %(name)s - %(module)s:%(funcName)s - %(message)s', datefmt='%d-%m-%Y %H:%M:%S')
 
 
 # Håndtering af http request
