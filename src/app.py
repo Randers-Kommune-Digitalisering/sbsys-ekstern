@@ -239,7 +239,7 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
         for sag in sager:
             matched_sag = compare_sag_ansaettelssted(sag, employment, institutions_and_departments)
             if matched_sag:
-              return matched_sag
+                return matched_sag
 
     # Go through sager and compare file name and archive date with personalesag in SD
     for sag in sager:
