@@ -1,14 +1,26 @@
 version: "3.9"
 services:
-  app:
-    build: .
-    read_only: true
+  # app:
+  #   build: .
+  #   read_only: true
+  #   networks:
+  #     - app_network
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     DEBUG: True
+
+  db:
+    image: postgres:16.1
+    restart: always
     networks:
       - app_network
     ports:
-      - "8080:8080"
+      - '5432:5432'
     environment:
-      DEBUG: True
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: app_db
 
 networks: 
   app_network:
