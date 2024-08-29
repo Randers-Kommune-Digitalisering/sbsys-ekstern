@@ -6,6 +6,9 @@ ENV APP_USER=non-root
 RUN addgroup $APP_USER && \
     adduser $APP_USER -D -G $APP_USER
 
+RUN apk update
+RUN apk add musl-dev gcc libpq-dev postgresql-dev python3-dev
+
 COPY . $APP_HOME
 WORKDIR $APP_HOME
 

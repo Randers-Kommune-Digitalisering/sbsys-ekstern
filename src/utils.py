@@ -1,9 +1,20 @@
-import requests, base64, time, logging
+import base64
+import requests
+import base64
+import sys
+import time
+import logging
 
-from config import SBSYS_URL, SBSIP_URL, SBSYS_CLIENT_ID, SBSYS_CLIENT_SECRET, SBSYS_USERNAME, SBSYS_PASSWORD
-
+from config import SBSYS_URL, SBSIP_URL, SBSYS_CLIENT_ID, SBSYS_CLIENT_SECRET, SBSYS_USERNAME, SBSYS_PASSWORD, DEBUG
+from database import SignaturFileupload, STATUS_CODE
 
 logger = logging.getLogger(__name__)
+
+
+def set_logging_configuration():
+    log_level = logging.DEBUG if DEBUG else logging.INFO
+    logging.basicConfig(stream=sys.stdout, level=log_level, format='[%(asctime)s] %(levelname)s - %(name)s - %(module)s:%(funcName)s - %(message)s', datefmt='%d-%m-%Y %H:%M:%S')
+
 
 # Håndtering af http request
 class APIClient:
@@ -95,10 +106,27 @@ class SBSYSClient:
         path = "api/sag/" + str(sag["Id"]) + "/delforloeb"
         return self.api_client.get(path)
 
+    def get_request(self, path):
+        return self.api_client.get(path)
+
+    def post_request(self, path, data=None, json=None):
+        return self.api_client.post(path, data, json)
+
+    def put_request(self, path, data=None, json=None):
+        return self.api_client.put(path, data, json)
+
+    def delete_request(self, path):
+        return self.api_client.delete(path)
+
     # journaliser fil
     def journalise_file_personalesag(self, data, files, delforloeb_id):
         path = "api/dokument/journaliser/" + str(delforloeb_id)        
         return self.api_client.post_upload(path, data=data, files=files)
+
+    def fetch_documents(self, sag_id):
+        path = f"api/sag/{sag_id}/dokumenter"
+        return self.api_client.get(path=path)
+
     
 # Convert a base64 encoded string to file
 def convert_filestring_to_bytes(file_string):
@@ -115,3 +143,13 @@ def convert_filestring_to_bytes(file_string):
         # If an error occurs during decoding or validation, return an error message
         print(f"Error decoding base64 string: {e}")
         return None, {"error": "File is not valid. Make sure it is a base64 encoded filestring"}
+
+
+def generate_response(message: str, http_code: int, upload=None, received_id=None):
+    if isinstance(upload, SignaturFileupload):
+        status, message = upload.get_status()
+        return {"id": upload.get_id(), "status_code": status.value, "status_text": status.name, "message": message}, http_code
+    elif received_id:
+        return {"id": received_id, "status_code": STATUS_CODE.FAILED.value, "status_text": STATUS_CODE.FAILED.name, "message": message}, http_code
+    else:
+        return {"id": None, "status_code": STATUS_CODE.FAILED.value, "status_text": STATUS_CODE.FAILED.name, "message": message}, http_code
