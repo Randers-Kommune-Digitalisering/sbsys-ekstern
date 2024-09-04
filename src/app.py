@@ -5,6 +5,7 @@ from datetime import datetime
 import sys
 import atexit
 import signal
+import time
 import logging
 import threading
 import http_status as status
@@ -189,7 +190,7 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
     # Fetch SD employment
     employment = sd_client.GetEmployment20111201(cpr=cpr, employment_identifier=employment_identifier, inst_code=inst_code)
     if not employment:
-        logger.warning(f"No employment found with cpr: {cpr}, employment_identifier: {employment_identifier}, or inst_code: {inst_code}")
+        logger.warning(f"No employment found with cpr: {cpr}, employment_identifier: {employment_identifier}, and inst_code: {inst_code}")
         return None
 
     employment_location_code = employment.get('EmploymentDepartment', None).get('DepartmentIdentifier', None)
@@ -206,9 +207,18 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
     # Fetch the person active personalesager
     sager = sbsys.fetch_active_personalesager(cpr)
 
+# Hacky solution - forcing sbsys personalesag to be created #
+    if not sager:
+        logger.warning(f"No sag found with cpr: {cpr} - trying to force create personalesag")
+
+        input_strings = [f'{cpr} {employment_identifier}']
+        sd_employment_files = fetch_sd_employment_files(input_strings)
+
+        sager = sbsys.fetch_active_personalesager(cpr)
+# ######################################################### #
     if not sager:
         logger.warning(f"No sag found with cpr: {cpr}")
-        return
+        return None
 
     # Go through sager and compare ansaettelsessted from sag to DepartmentCode from SD employment
     for sag in sager:
@@ -445,23 +455,28 @@ class JournalisationError(Exception):
 
 
 def journalise_document(sag: object, upload):
-    # For a given sag, save the array of delforloeb
-    delforloeb_array = sbsys.find_personalesag_delforloeb(sag)
-    if len(delforloeb_array) < 1:
-        upload.set_status(STATUS_CODE.FAILED, "No delforloeb found for case")
-        return None
+    try:
+        # For a given sag, save the array of delforloeb
+        delforloeb_array = sbsys.find_personalesag_delforloeb(sag)
+        if len(delforloeb_array) < 1:
+            upload.set_status(STATUS_CODE.FAILED, "No delforloeb found for case")
+            return None
 
-    delforloeb_object_from_index = delforloeb_array[0]  # Select the first delforloeb object
-    delforloeb_id = delforloeb_object_from_index["ID"]  # Save the unique ID of the delforloeb object
+        delforloeb_object_from_index = delforloeb_array[0]  # Select the first delforloeb object
+        delforloeb_id = delforloeb_object_from_index["ID"]  # Save the unique ID of the delforloeb object
 
-    # Journalise file
-    response = sbsys.journalise_file(sag, upload.file, delforloeb_id, upload.id)
+        # Journalise file
+        response = sbsys.journalise_file(sag, upload.file, delforloeb_id, upload.id)
 
-    # Check if sag is None
-    if response is None:
-        upload.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "Failed to upload file, try again")
+        # Check if sag is None
+        if response is None:
+            upload.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "Failed to upload file, try again")
 
-    return response
+        return response
+    except Exception as e:
+        logger.error(f"journalise_document error: {e}")
+        upload.set_status(STATUS_CODE.FAILED, "An unexpected error occurred")
+
 
 
 worker_stop_event = threading.Event()
@@ -474,12 +489,26 @@ def worker_job():
         with db_client.get_session() as sess:
             upload_file = db_client.get_next_signatur_file_upload(sess)
             if upload_file:
-                sag = fetch_personalesag(upload_file.cpr, upload_file.employment, upload_file.institutionIdentifier)
-                if sag:
-                    if journalise_document(sag, upload_file):
-                        upload_file.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
-                else:
-                    upload_file.set_status(STATUS_CODE.FAILED, "No case found in SBSYS")
+                
+                times_to_try = 3
+                time_to_sleep = 5
+                i = 0
+
+                while i < times_to_try:
+                    sag = fetch_personalesag(upload_file.cpr, upload_file.employment, upload_file.institutionIdentifier)
+                    if sag:
+                        if journalise_document(sag, upload_file):
+                            upload_file.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
+                            break
+                    else:
+                        if i < times_to_try - 1:
+                            logger.info(f"Failed to find sag, try: {i+1}, will try again in {time_to_sleep} seconds")
+                        else:
+                            logger.info(f"Failed to find sag, try: {i+1}, will not try again")
+                            upload_file.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "No case found in SBSYS")
+                        i += 1
+                        time.sleep(time_to_sleep)
+
             sess.commit()
     logger.info("Worker stopped")
 
