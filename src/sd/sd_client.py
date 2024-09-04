@@ -117,8 +117,11 @@ class SDClient:
         except Exception as e:
             logger.error(f"An error occurred while perform delete_request: {e}")
 
-    def GetEmployment20111201(self, cpr, employment_identifier, inst_code, effective_date = None):
+    def GetEmployment20111201(self, cpr, employment_identifier, inst_code, effective_date=None):
         path = 'GetEmployment20111201'
+
+        # Strip "-" from cpr
+        cpr = cpr.replace("-", "")
 
         if not effective_date:
             # Get the current date and format it as DD.MM.YYYY

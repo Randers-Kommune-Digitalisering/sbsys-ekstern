@@ -184,6 +184,7 @@ def fetch_personalesag(cpr, employment_identifier, institution_identifier):
         inst_code=institution_identifier,
     )
 
+
 def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, inst_code: str):
     # Fetch SD employment
     employment = sd_client.GetEmployment20111201(cpr=cpr, employment_identifier=employment_identifier, inst_code=inst_code)
