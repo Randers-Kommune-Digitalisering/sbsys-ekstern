@@ -650,7 +650,7 @@ def worker_job():
     departments_by_level_3_updated = datetime.now()
     
     while not worker_stop_event.is_set():
-        if not departments_by_level_3 or (datetime.now() - departments_by_level_3_updated).hours > 12:
+        if not departments_by_level_3 or (datetime.now() - departments_by_level_3_updated).seconds > 43200 :
             departments_by_level_3 = group_by_level_3('9R')
             departments_by_level_3_updated = datetime.now()
         with db_client.get_session() as sess:
