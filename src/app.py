@@ -16,7 +16,7 @@ from config import DEBUG, KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE, DB_HO
 from request_validation import is_cpr, is_employment, is_institution, is_pdf  # , is_timestamp
 from utils import set_logging_configuration, generate_response, STATUS_CODE  # , SignaturFileupload
 from sd.sd_client import SDClient
-from browserless import browserless_sd_personalesag_files
+from browserless import browserless_sd_personalesag_files, browserless_sd_personalesag_exist
 
 set_logging_configuration()
 
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 # Set up the database
-Base.metadata.create_all(db_client.get_engine())
+# Base.metadata.create_all(db_client.get_engine())
 
 
 def create_app():
@@ -207,15 +207,14 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
     # Fetch the person active personalesager
     sager = sbsys.fetch_active_personalesager(cpr)
 
-# Hacky solution - forcing sbsys personalesag to be created #
     if not sager:
         logger.warning(f"No sag found with cpr: {cpr} - trying to force create personalesag")
+        input_string = '{cpr} {employment_identifier}'
+        res_dict = check_sd_has_personalesag(input_string)
+        if res_dict.get('success', None):
+            logger.info(f"Personalesag was created for cpr: {cpr} - trying to fetch sager again")
+            sager = sbsys.fetch_active_personalesager(cpr)
 
-        input_strings = [f'{cpr} {employment_identifier}']
-        sd_employment_files = fetch_sd_employment_files(input_strings)
-
-        sager = sbsys.fetch_active_personalesager(cpr)
-# ######################################################### #
     if not sager:
         logger.warning(f"No sag found with cpr: {cpr}")
         return None
@@ -226,47 +225,19 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
         if matched_sag:
             return matched_sag
 
-    input_strings = [f'{cpr} {employment_identifier}']
-    sd_employment_files = fetch_sd_employment_files(input_strings)
+    # No matched sag - trying to create personalesag
+    res_dict = check_sd_has_personalesag(input_string)
+    if res_dict.get('success', None):
+        logger.info(f"Personalesag was created for cpr: {cpr} - trying to fetch sager again")
+        sager = sbsys.fetch_active_personalesager(cpr)
 
-    if not sd_employment_files:
-        logger.warning("sd_employment_files is None")
-        return None
-
-    sd_file_result = sd_employment_files.get('allResults', None)
-    if not sd_file_result:
-        logger.warning("sd_file_result is None")
-        return None
-
-    if not len(sd_file_result) == 1:
-        logger.warning(f"sd_file_result has a length of '{len(sd_file_result)}', but it should have a length of '1'")
-        return None
-
-    # Select the first element of the list with one element
-    sd_file_result = sd_file_result[0]
-    # Check if result is empty
-    if not sd_file_result['result']:
-        # Go through sager and compare ansaettelsessted from sag to DepartmentCode from SD employment
-        for sag in sager:
-            matched_sag = compare_sag_ansaettelssted(sag, employment, institutions_and_departments)
-            if matched_sag:
-                return matched_sag
-
-    # Go through sager and compare file name and archive date with personalesag in SD
+    # Go through sager and compare ansaettelsessted from sag to DepartmentCode from SD employment
     for sag in sager:
-        sag_id = sag.get('Id', None)
-
-        if not sag_id:
-            logger.info(f"sag_id is None - No sag id found for sag with cpr: {cpr}")
-            continue
-
-        # Fetch the files from given delforloeb in current sag
-        matched_sag = compare_sag_and_results(sd_file_result, sag)
-        if not matched_sag:
-            continue
-
-        # logger.debug(matched_sag)
-        return matched_sag
+        matched_sag = compare_sag_ansaettelssted(sag, employment, institutions_and_departments)
+        if matched_sag:
+            return matched_sag
+        
+    logger.error(f"No sag found matching: {cpr} {employment_identifier}- No match found between SD and SBSYS")
 
     return None
 
@@ -448,6 +419,22 @@ def fetch_sd_employment_files(input_strings: list):
     except Exception as e:
         logger.error(f"fetch_sd_employment_files error: {e}")
         return None
+    
+
+def check_sd_has_personalesag(input_string: str):
+    try:
+        # Make the request and get the response
+        response = browserless_sd_personalesag_exist(input_string)
+
+        # Check if the response status code is 200
+        if response.status_code == 200:
+            # Return the content if the status is 200
+            return response.json()  # Assuming the content is JSON
+        else:
+            logger.error(f"Request failed with status code: {response.status_code} and message: {response.content}")
+    except Exception as e:
+        logger.error(f"fetch_sd_employment_files error: {e}")
+        return None
 
 
 class JournalisationError(Exception):
@@ -476,7 +463,6 @@ def journalise_document(sag: object, upload):
     except Exception as e:
         logger.error(f"journalise_document error: {e}")
         upload.set_status(STATUS_CODE.FAILED, "An unexpected error occurred")
-
 
 
 worker_stop_event = threading.Event()
@@ -528,7 +514,16 @@ def shutdown_server(sig, frame):
 
 
 if __name__ == "__main__":
-    worker.start()
-    atexit.register(stop_worker)
-    signal.signal(signal.SIGINT, shutdown_server)
-    app.run(debug=DEBUG, host='0.0.0.0', port=8080)
+    # worker.start()
+    # atexit.register(stop_worker)
+    # signal.signal(signal.SIGINT, shutdown_server)
+    # app.run(debug=DEBUG, host='0.0.0.0', port=8080)
+
+    # sager =  sbsys.fetch_active_personalesager("2503873071")
+    from browserless import browserless_sd_personalesag_exist, browserless_sd_personalesag_files
+
+    res = browserless_sd_personalesag_exist("2503873071 16986")
+    print(res.json()['success'])
+
+    # res = browserless_sd_personalesag_files(["2503873071 16986"])
+    # print(res.content)
