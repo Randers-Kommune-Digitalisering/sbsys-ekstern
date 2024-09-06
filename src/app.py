@@ -514,16 +514,7 @@ def shutdown_server(sig, frame):
 
 
 if __name__ == "__main__":
-    # worker.start()
-    # atexit.register(stop_worker)
-    # signal.signal(signal.SIGINT, shutdown_server)
-    # app.run(debug=DEBUG, host='0.0.0.0', port=8080)
-
-    # sager =  sbsys.fetch_active_personalesager("REMOVED")
-    from browserless import browserless_sd_personalesag_exist, browserless_sd_personalesag_files
-
-    res = browserless_sd_personalesag_exist("REMOVED 16986")
-    print(res.json()['success'])
-
-    # res = browserless_sd_personalesag_files(["REMOVED 16986"])
-    # print(res.content)
+    worker.start()
+    atexit.register(stop_worker)
+    signal.signal(signal.SIGINT, shutdown_server)
+    app.run(debug=DEBUG, host='0.0.0.0', port=8080)
