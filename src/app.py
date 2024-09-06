@@ -177,16 +177,17 @@ def fetch_sag(cpr):
     return sbsys.find_newest_personalesag({"cpr": cpr, "sagType": {"Id": 5}})
 
 
-def fetch_personalesag(cpr, employment_identifier, institution_identifier):
+def fetch_personalesag(cpr, employment_identifier, institution_identifier, level_3_departments):
 
     return find_personalesag_by_sd_employment(
         cpr=cpr,
         employment_identifier=employment_identifier,
         inst_code=institution_identifier,
+        level_3_departments=level_3_departments
     )
 
 
-def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, inst_code: str):
+def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, inst_code: str, level_3_departments: dict):
     # Fetch SD employment
     employment = sd_client.GetEmployment20111201(cpr=cpr, employment_identifier=employment_identifier, inst_code=inst_code)
     if not employment:
@@ -201,14 +202,14 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
     institutions_and_departments = sd_client.fetch_departments(inst_identifier=inst_code)
 
     if not institutions_and_departments:
-        logger.warning(f"No institutions_and_departments were found on region code 9R")
+        logger.warning("No institutions_and_departments were found on region code 9R")
         return None
 
     # Fetch the person active personalesager
     sager = sbsys.fetch_active_personalesager(cpr)
 
     if not sager:
-        logger.warning(f"No sag found with cpr: {cpr} - trying to force create personalesag")
+        logger.info(f"No sag found with cpr: {cpr} - trying to force create personalesag")
         input_string = '{cpr} {employment_identifier}'
         res_dict = check_sd_has_personalesag(input_string)
         if res_dict.get('success', None):
@@ -216,7 +217,7 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
             sager = sbsys.fetch_active_personalesager(cpr)
 
     if not sager:
-        logger.warning(f"No sag found with cpr: {cpr}")
+        logger.error(f"No sag found with cpr: {cpr}")
         return None
 
     # Go through sager and compare ansaettelsessted from sag to DepartmentCode from SD employment
@@ -236,6 +237,11 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
         matched_sag = compare_sag_ansaettelssted(sag, employment, institutions_and_departments)
         if matched_sag:
             return matched_sag
+        # Match on level 3 department
+        else:
+            matched_sag = compare_sd_and_sbsys_employment_place_by_level_3(sag, employment, level_3_departments)
+            if matched_sag:
+                return matched_sag
         
     logger.error(f"No sag found matching: {cpr} {employment_identifier}- No match found between SD and SBSYS")
 
@@ -246,18 +252,17 @@ def compare_sag_ansaettelssted(sag: dict, employment, institutions_and_departmen
     sag_id = sag.get('Id', None)
 
     if not sag_id:
-        logger.warning(f"sag_id is None - No sag id found in compare_sag_ansaettelssted")
+        logger.error("sag_id is None - No sag id found in compare_sag_ansaettelssted")
         return None
 
     sag_employment_location = sag.get('Ansaettelsessted', None).get('Navn', None)
     if not sag_employment_location:
-        logger.info(f"sag_employment_location is None - No Ansaettelsessted found on sag id: {sag_id}")
+        logger.error(f"sag_employment_location is None - No Ansaettelsessted found on sag id: {sag_id}")
         return None
 
     department_codes = find_department_codes(institutions_and_departments, sag_employment_location)
     if not department_codes:
-        logger.info(
-            f"department_codes is None - sag with id: {sag_id} {sag_employment_location} does not correspond with any SD departments")
+        logger.error(f"department_codes is None - sag with id: {sag_id} {sag_employment_location} does not correspond with any SD departments")
         return None
 
     # Compare the sag_employment_location from personalesag to departmentname
@@ -269,6 +274,7 @@ def compare_sag_ansaettelssted(sag: dict, employment, institutions_and_departmen
                     f"{employment_location_match_list[0].get('EmploymentIdentifier', None)}"
                     f", {sag_id}")
         return sag
+
     elif len(employment_location_match_list) > 1:
         logger.warning(
             f"employment_location_match_list has a length of: {len(employment_location_match_list)} - It should have a legth of one, since there is only one employment")
@@ -292,8 +298,7 @@ def compare_sag_and_results(sd_result: dict, sag: dict):
         return None
 
     # Fetch the files from given delforloeb in current sag
-    sag_documents = sbsys.fetch_delforloeb_files(sag_id=sag_id, delforloeb_title="01 Ansættelse",
-                                              allowed_filetypes=[], document_keywords=[])
+    sag_documents = sbsys.fetch_delforloeb_files(sag_id=sag_id, delforloeb_title="01 Ansættelse", allowed_filetypes=[], document_keywords=[])
 
     if not sag_documents:
         logger.info(f"sag with id: {sag_id} has no documents")
@@ -465,13 +470,189 @@ def journalise_document(sag: object, upload):
         upload.set_status(STATUS_CODE.FAILED, "An unexpected error occurred")
 
 
+# LEVEL 3 stuff START
+def fetch_institution_nested(region_identifier):
+    path = 'GetOrganization'
+
+    # Define the SD params
+    params = {
+        'RegionCode': region_identifier
+
+    }
+
+    organization = sd_client.get_request(path, params)
+    organization = organization.get('OrganizationInformation', None)
+    organization = organization.get('Region', None)
+    institution = organization.get('Institution', [])
+
+    return institution
+
+
+def fetch_institutions_flattened(region_identifier):
+    inst_and_dep = []
+    # Get institutions
+    path = 'GetInstitution20080201'
+    try:
+        params = {
+            'RegionIdentifier': region_identifier
+        }
+        response = sd_client.post_request(path=path, params=params)
+
+        if not response:
+            logger.warning("No response from SD client")
+            return None
+
+        if not response['GetInstitution20080201']:
+            logger.warning("GetInstitution20080201 object not found")
+            return None
+
+        if not response['GetInstitution20080201']['Region']:
+            logger.warning("Region object not found")
+            return None
+        region = response['GetInstitution20080201']['Region']
+
+
+        if not region['Institution']:
+            logger.warning("Institution list not found")
+            return None
+        inst_list = region['Institution']
+
+        # Get departments
+        path = 'GetDepartment20080201'
+        date_today = datetime.now().strftime('%d.%m.%Y')
+        for inst in inst_list:
+            institution_identifier = inst.get('InstitutionIdentifier', None)
+            institution_name = inst.get('InstitutionName', None)
+
+            if not institution_identifier or not institution_name:
+                logger.warning("InstitutionIdentifier or InstitutionName is None")
+                continue
+            # Define the SD params
+            params = {
+                'InstitutionIdentifier': institution_identifier,
+                'ActivationDate': date_today,
+                'DeactivationDate': date_today,
+                'DepartmentNameIndicator': 'true'
+            }
+
+            response = sd_client.post_request(path=path, params=params)
+
+            if not response:
+                logger.warning("No response from SD client")
+                return None
+
+            if not response['GetDepartment20080201']:
+                logger.warning("GetDepartment20080201 object not found")
+                return None
+
+            if not response['GetDepartment20080201']['Department']:
+                logger.warning("Department list not found")
+                return None
+            department_list = response['GetDepartment20080201']['Department']
+
+            inst_and_dep_dict = {'InstitutionIdentifier': institution_identifier,
+                                 'InstitutionName': institution_name,
+                                 'Department': department_list}
+            inst_and_dep.append(inst_and_dep_dict)
+
+        return inst_and_dep
+
+    except Exception as e:
+        logger.error(f"Error while fetching inst and departments: {e} \n"
+                     f"Region code: {region_identifier}")
+        return []
+
+
+def group_by_level_3(region_identifier):
+    departments_by_level_3 = {}
+
+    def handle_departments(item, top=None):
+
+        def handle(item, top=None):
+
+            def checkname(name):
+                if not name or "UDGÅET" in name or "IKKE I BRUG" in name:
+                    return False
+                return True
+
+            level = item.get("DepartmentLevel", None)
+            code = item.get("DepartmentCode", None)
+            name = item.get("DepartmentCodeName", None)
+
+            if not name:
+                name = ''
+
+            if int(level) == 3 and not top:
+                top = code
+                departments_by_level_3[code] = {'codes': []}
+            elif top and int(level) < 3:
+                if checkname(name):
+                    departments_by_level_3[top]['codes'].append(code)
+            else:
+                if checkname(name):
+                    logger.warn(f"SD level 3 - department has no level 3, code: {code}, name: {name}")
+
+            if int(level) > 0:
+                handle_departments(item, top)
+
+        if isinstance(item.get("Department", None), dict):
+            handle(item.get("Department", None), top)
+        elif isinstance(item.get("Department", None), list):
+            for department in item.get("Department", None):
+                handle(department, top)
+        else:
+            logger.error("SD level 3 - department - is not a dict or list")
+
+    institutions_nested = fetch_institution_nested(region_identifier)
+    for item in institutions_nested:
+        handle_departments(item)
+
+    institutions_flattened = fetch_institutions_flattened(region_identifier)
+    all_departments = []
+    for institution in institutions_flattened:
+        if isinstance(institution.get("Department", None), list):
+            for department in institution.get("Department", None):
+                all_departments.append({'code': department.get("DepartmentIdentifier", None), 'name': department.get("DepartmentName", None)})
+        else:
+            logger.error(f'SD level 3 - Institution with id: {institution.get("InstitutionIdentifier", None)} - Department value is not a list')
+
+    for key, value in departments_by_level_3.items():
+        names = []
+        for code in value.get('codes'):
+            department_name = next((item['name'] for item in all_departments if item["code"] == code), None)
+            if department_name:
+                names.append(department_name)
+            else:
+                logger.error(f"SD level 3 - department - code: {code} - name not found")
+
+        departments_by_level_3[key]['names'] = names
+
+    return departments_by_level_3
+
+
+def compare_sd_and_sbsys_employment_place_by_level_3(sag, employment, level_3_departments):
+    for key in level_3_departments:
+        if (sag.get('Ansaettelsessted', None).get('Navn', None) in level_3_departments[key].get('names', []) and
+                employment.get('EmploymentDepartment', {}).get('DepartmentIdentifier') in level_3_departments[key].get('codes', [])):
+            return sag
+
+# LEVEL 3 stuff END
+
+
 worker_stop_event = threading.Event()
 
 
 def worker_job():
     logger = logging.getLogger('worker_thread')
     logger.info("Worker started")
+    
+    departments_by_level_3 = None
+    departments_by_level_3_updated = datetime.now()
+    
     while not worker_stop_event.is_set():
+        if not departments_by_level_3 or (datetime.now() - departments_by_level_3_updated).hours > 12:
+            departments_by_level_3 = group_by_level_3('9R')
+            departments_by_level_3_updated = datetime.now()
         with db_client.get_session() as sess:
             upload_file = db_client.get_next_signatur_file_upload(sess)
             if upload_file:
@@ -481,7 +662,7 @@ def worker_job():
                 i = 0
 
                 while i < times_to_try:
-                    sag = fetch_personalesag(upload_file.cpr, upload_file.employment, upload_file.institutionIdentifier)
+                    sag = fetch_personalesag(upload_file.cpr, upload_file.employment, upload_file.institutionIdentifier, departments_by_level_3)
                     if sag:
                         if journalise_document(sag, upload_file):
                             upload_file.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
