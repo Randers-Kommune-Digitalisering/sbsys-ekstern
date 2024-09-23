@@ -208,9 +208,10 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
     # Fetch the person active personalesager
     sager = sbsys.fetch_active_personalesager(cpr)
 
+    input_string = '{cpr} {employment_identifier}'
+
     if not sager:
         logger.info(f"No sag found with cpr: {cpr} - trying to force create personalesag")
-        input_string = '{cpr} {employment_identifier}'
         res_dict = check_sd_has_personalesag(input_string)
         if res_dict.get('success', None):
             logger.info(f"Personalesag was created for cpr: {cpr} - trying to fetch sager again")
@@ -242,7 +243,7 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
             matched_sag = compare_sd_and_sbsys_employment_place_by_level_3(sag, employment, level_3_departments)
             if matched_sag:
                 return matched_sag
-        
+
     logger.error(f"No sag found matching: {cpr} {employment_identifier}- No match found between SD and SBSYS")
 
     return None
