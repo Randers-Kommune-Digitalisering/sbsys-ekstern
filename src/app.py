@@ -661,10 +661,18 @@ def worker_job():
     departments_by_level_3_updated = datetime.now()
 
     while not worker_stop_event.is_set():
+        # Fetch the departments by level 3 every 12 hours
         if not departments_by_level_3 or (datetime.now() - departments_by_level_3_updated).seconds > 43200:
             departments_by_level_3 = group_by_level_3('9R')
             departments_by_level_3_updated = datetime.now()
         with db_client.get_session() as sess:
+            # Clean up database
+            old_files = db_client.get_stuck_signatur_file_uploads(sess)
+            if old_files:
+                for f in old_files:
+                    f.set_status(STATUS_CODE.FAILED, "File was not processed in time")
+
+            # Fetch the next file to process
             upload_file = db_client.get_next_signatur_file_upload(sess)
             if upload_file:
 
