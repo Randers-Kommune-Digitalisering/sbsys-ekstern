@@ -672,27 +672,28 @@ def worker_job():
                     logger.error("No departments found")
                     upload_file.set_status(STATUS_CODE.FAILED, "No departments found")
                     sess.commit()
-                    continue
+                else:
+                    logger.info(f"Processing file with id: {upload_file.id}")
+                    # times_to_try = 3
+                    # time_to_sleep = 5
+                    # i = 0
 
-                times_to_try = 3
-                time_to_sleep = 5
-                i = 0
-
-                while i < times_to_try:
+                    # while i < times_to_try:
                     sag = fetch_personalesag(upload_file.cpr, upload_file.employment, upload_file.institutionIdentifier, departments_by_level_3)
                     if sag:
                         if journalise_document(sag, upload_file):
                             upload_file.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
-                            break
-                    else:
-                        if i < times_to_try - 1:
-                            logger.info(f"Failed to find sag, try: {i+1}, will try again in {time_to_sleep} seconds")
+                            # break
                         else:
-                            logger.info(f"Failed to find sag, try: {i+1}, will not try again")
-                            upload_file.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "No case found in SBSYS")
-                        i += 1
-                        time.sleep(time_to_sleep)
-
+                            upload_file.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "Failed to upload file, try again")
+                    else:
+                        # if i < times_to_try - 1:
+                            # logger.info(f"Failed to find sag, try: {i+1}, will try again in {time_to_sleep} seconds")
+                        # else:
+                            # logger.info(f"Failed to find sag, try: {i+1}, will not try again")
+                        upload_file.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "No case found in SBSYS")
+                        # i += 1
+                        # time.sleep(time_to_sleep)
             sess.commit()
     logger.info("Worker stopped")
 
