@@ -20,7 +20,7 @@ class BaseAPIClient(ABC):
         if path.startswith("http://") or path.startswith("https://"):
             url = path
         else:
-            url = f"{self.base_url}/{path}"
+            url = f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"
         try:
             response = method(url, headers=headers, **kwargs)
             response.raise_for_status()
