@@ -3,6 +3,7 @@ import logging
 import uuid
 
 from enum import Enum as ENUM
+from datetime import datetime, timedelta
 
 from sqlalchemy import Column, String, Enum, LargeBinary, DateTime
 from sqlalchemy.orm import Session, DeclarativeBase
@@ -97,7 +98,7 @@ class DatabaseClient:
 
     def get_stuck_signatur_file_uploads(self, session):
         try:
-            uploads = session.query(SignaturFileupload).filter(SignaturFileupload.status == STATUS_CODE.PROCESSING).filter(SignaturFileupload.updated_at < sqlalchemy.func.now() - sqlalchemy.text('INTERVAL 30 MINUTE')).all()
+            uploads = session.query(SignaturFileupload).filter(SignaturFileupload.status == STATUS_CODE.PROCESSING).filter(SignaturFileupload.updated_at < datetime.now() - timedelta(seconds=3600)).all()
             return uploads
         except Exception as e:
             self.logger.error(f"Error getting object from database: {e}")
