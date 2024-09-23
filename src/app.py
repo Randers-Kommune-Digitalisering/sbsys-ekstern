@@ -1,6 +1,6 @@
 from flask import Flask, request
 from healthcheck import HealthCheck
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import sys
 import atexit
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 # Set up the database
-# Base.metadata.create_all(db_client.get_engine())
+Base.metadata.create_all(db_client.get_engine())
 
 
 def create_app():
