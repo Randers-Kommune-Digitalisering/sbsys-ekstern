@@ -424,7 +424,7 @@ def fetch_sd_employment_files(input_strings: list):
     except Exception as e:
         logger.error(f"fetch_sd_employment_files error: {e}")
         return None
-    
+
 
 def check_sd_has_personalesag(input_string: str):
     try:
@@ -481,11 +481,14 @@ def fetch_institution_nested(region_identifier):
     }
 
     organization = sd_client.get_request(path, params)
-    organization = organization.get('OrganizationInformation', None)
-    organization = organization.get('Region', None)
-    institution = organization.get('Institution', [])
+    if organization:
+        organization = organization.get('OrganizationInformation', None)
+        organization = organization.get('Region', None)
+        institution = organization.get('Institution', [])
 
-    return institution
+        return institution
+    else:
+        logger.error(f"Error while fetching institution nested with region identifier: {region_identifier}")
 
 
 def fetch_institutions_flattened(region_identifier):
@@ -510,7 +513,6 @@ def fetch_institutions_flattened(region_identifier):
             logger.warning("Region object not found")
             return None
         region = response['GetInstitution20080201']['Region']
-
 
         if not region['Institution']:
             logger.warning("Institution list not found")
@@ -590,7 +592,7 @@ def group_by_level_3(region_identifier):
                     departments_by_level_3[top]['codes'].append(code)
             else:
                 if checkname(name):
-                    logger.warn(f"SD level 3 - department has no level 3, code: {code}, name: {name}")
+                    logger.warning(f"SD level 3 - department has no level 3, code: {code}, name: {name}")
 
             if int(level) > 0:
                 handle_departments(item, top)
@@ -604,10 +606,18 @@ def group_by_level_3(region_identifier):
             logger.error("SD level 3 - department - is not a dict or list")
 
     institutions_nested = fetch_institution_nested(region_identifier)
+    if not institutions_nested:
+        logger.error("Unable to fetch institutions nested")
+        return None
+
     for item in institutions_nested:
         handle_departments(item)
 
     institutions_flattened = fetch_institutions_flattened(region_identifier)
+    if not institutions_flattened:
+        logger.error("Unable to fetch institutions flattened")
+        return None
+    
     all_departments = []
     for institution in institutions_flattened:
         if isinstance(institution.get("Department", None), list):
@@ -645,18 +655,24 @@ worker_stop_event = threading.Event()
 def worker_job():
     logger = logging.getLogger('worker_thread')
     logger.info("Worker started")
-    
+
     departments_by_level_3 = None
     departments_by_level_3_updated = datetime.now()
-    
+
     while not worker_stop_event.is_set():
-        if not departments_by_level_3 or (datetime.now() - departments_by_level_3_updated).seconds > 43200 :
+        if not departments_by_level_3 or (datetime.now() - departments_by_level_3_updated).seconds > 43200:
             departments_by_level_3 = group_by_level_3('9R')
             departments_by_level_3_updated = datetime.now()
         with db_client.get_session() as sess:
             upload_file = db_client.get_next_signatur_file_upload(sess)
             if upload_file:
-                
+
+                if not departments_by_level_3:
+                    logger.error("No departments found")
+                    upload_file.set_status(STATUS_CODE.FAILED, "No departments found")
+                    sess.commit()
+                    continue
+
                 times_to_try = 3
                 time_to_sleep = 5
                 i = 0
