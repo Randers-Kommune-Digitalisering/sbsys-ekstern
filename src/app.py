@@ -221,10 +221,13 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
         logger.error(f"No sag found with cpr: {cpr}")
         return None
 
+    logger.info(f"Found {len(sager)} sager for cpr: {cpr}")
+
     # Go through sager and compare ansaettelsessted from sag to DepartmentCode from SD employment
     for sag in sager:
         matched_sag = compare_sag_ansaettelssted(sag, employment, institutions_and_departments)
         if matched_sag:
+            logger.info(f"Match found between employment_identifier, and sag_id: {employment_identifier}, {matched_sag.get('Id', None)}")
             return matched_sag
 
     # No matched sag - trying to create personalesag
@@ -237,11 +240,13 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
     for sag in sager:
         matched_sag = compare_sag_ansaettelssted(sag, employment, institutions_and_departments)
         if matched_sag:
+            logger.info(f"Match found between employment_identifier, and sag_id: {employment_identifier}, {matched_sag.get('Id', None)}")
             return matched_sag
         # Match on level 3 department
         else:
             matched_sag = compare_sd_and_sbsys_employment_place_by_level_3(sag, employment, level_3_departments)
             if matched_sag:
+                logger.info(f"Match found between employment_identifier, and sag_id: {employment_identifier}, {matched_sag.get('Id', None)}")
                 return matched_sag
 
     logger.error(f"No sag found matching: {cpr} {employment_identifier}- No match found between SD and SBSYS")
@@ -452,6 +457,7 @@ def journalise_document(sag: object, upload):
         # For a given sag, save the array of delforloeb
         delforloeb_array = sbsys.find_personalesag_delforloeb(sag)
         if len(delforloeb_array) < 1:
+            logger.error("No delforloeb found for case")
             upload.set_status(STATUS_CODE.FAILED, "No delforloeb found for case")
             return None
 
@@ -460,6 +466,8 @@ def journalise_document(sag: object, upload):
 
         # Journalise file
         response = sbsys.journalise_file(sag, upload.file, delforloeb_id, upload.id)
+
+        logger.info(f"Journalise response: {response}")
 
         # Check if sag is None
         if response is None:
@@ -689,12 +697,16 @@ def worker_job():
                     # while i < times_to_try:
                     sag = fetch_personalesag(upload_file.cpr, upload_file.employment, upload_file.institutionIdentifier, departments_by_level_3)
                     if sag:
+                        logger.info(f"Found sag: {sag.get('Id', None)} - uploading file")
                         if journalise_document(sag, upload_file):
+                            logger.info(f"File {upload_file.file_name} was uploaded successfully")
                             upload_file.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
                             # break
                         else:
+                            logger.error(f"Failed to upload file {upload_file.file_name}")
                             upload_file.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "Failed to upload file, try again")
                     else:
+                        logger.error(f"No sag found for cpr: {upload_file.cpr} and employment: {upload_file.employment}")
                         # if i < times_to_try - 1:
                             # logger.info(f"Failed to find sag, try: {i+1}, will try again in {time_to_sleep} seconds")
                         # else:

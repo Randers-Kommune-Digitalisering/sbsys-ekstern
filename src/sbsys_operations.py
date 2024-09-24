@@ -162,6 +162,8 @@ class SBSYSOperations:
             # Call the journalise_file_personalesag method and capture the response
             response = self.client.journalise_file_personalesag(json_data, files, delforloeb_id)
 
+            logger.info(f"journalise_file response: {response}")
+
             # Check if the response is received
             if response:
                 return response
