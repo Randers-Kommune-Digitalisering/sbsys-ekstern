@@ -208,7 +208,7 @@ def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, ins
     # Fetch the person active personalesager
     sager = sbsys.fetch_active_personalesager(cpr)
 
-    input_string = '{cpr} {employment_identifier}'
+    input_string = f'{cpr.replace("-", "")} {employment_identifier}'
 
     if not sager:
         logger.info(f"No sag found with cpr: {cpr} - trying to force create personalesag")
