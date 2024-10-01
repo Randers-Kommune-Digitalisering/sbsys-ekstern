@@ -152,7 +152,7 @@ class SBSYSOperations:
             sag_id = sag['Id']
             # Call the journalise_file_personalesag method with the JSON data
             json_data = {
-                "json": f'{{"SagID": {sag_id}, "OmfattetAfAktindsigt": true, "DokumentNavn": "E-rekruttering – Ansættelsesdata", "DokumentArt": {{"Id": 1}}}}'
+                "json": f'{{"SagID": {sag_id}, "OmfattetAfAktindsigt": true, "DokumentNavn": "E-rekruttering - Ansættelsesdata", "DokumentArt": {{"Id": 1}}}}'
                 # DokumentArt Id 1 = "Indgående" dokument art
             }
 
