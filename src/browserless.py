@@ -1,9 +1,11 @@
 import logging
 import requests
-import json
 from requests.auth import HTTPBasicAuth
 from config import BROWSERLESS_CLIENT_ID, BROWSERLESS_CLIENT_SECRET, SD_PERSONALESAG_ROBOT_USERNAME, \
     SD_PERSONALESAG_ROBOT_PASSWORD
+
+
+logger = logging.getLogger(__name__)
 
 
 def browserless_sd_personalesag_files(input_strings):
@@ -205,4 +207,177 @@ if (dropdownItems.length > 0) {
 
     response = requests.post(url, headers=headers, data=data, auth=HTTPBasicAuth(username=BROWSERLESS_CLIENT_ID,
                                                                                  password=BROWSERLESS_CLIENT_SECRET))
+    return response
+
+
+def browserless_sd_personalesag_exist(input_string):
+    url = "https://browserless.prototypes.randers.dk/function"
+    headers = {"Content-Type": "application/javascript", }
+
+    data = """
+    
+    // Full TypeScript support for both puppeteer and the DOM
+    module.exports = async ({ page }) => {
+
+    const inputString = """ + f"'{input_string}'" + """
+
+    // Perform initial login and navigation steps
+    await page.goto('https://sd.dk/start',{waitUntil: 'networkidle2' });
+
+    // Log in console when loaded
+    console.log("Page loaded");
+
+    // Wait for the button to be available
+    await page.waitForSelector('#arbejdspladsButton', { timeout: 5000 });
+    console.log("arbejdspladsButton found");
+
+    // Click the button with the id "arbejdspladsButton"
+    await page.click('#arbejdspladsButton');
+    console.log("Button clicked and navigation completed");
+
+    // Wait for the iframe to be loaded
+    await page.waitForSelector('iframe');  // Adjust the selector to target the specific iframe if necessary
+
+    // Get the iframe element
+    const iframeElement = await page.$('iframe');  // Adjust the selector to target the specific iframe if necessary
+    const iframe = await iframeElement.contentFrame();
+
+    // Wait for the select element to be loaded inside the iframe
+    await iframe.waitForSelector('#oiosaml-idp');
+
+    // Get the value of the option with text 'Randers Kommune' inside the iframe
+    const value = await iframe.evaluate(() => {
+        const options = document.querySelectorAll('#oiosaml-idp option');
+        for (const option of options) {
+            if (option.textContent.trim() === 'Randers Kommune') {
+                return option.value;
+            }
+        }
+        return null;
+    });
+
+    // Print the value
+    console.log(value);
+
+    await page.goto("https://sd.dk/" + value);
+
+    // Log a message indicating the button was clicked
+    console.log("Button clicked and navigation completed");
+
+    // Wait for the username input field to be available
+    await page.waitForSelector('#userNameInput');
+
+    // Type the username
+    await page.type('#userNameInput',""" + "'" + f"{SD_PERSONALESAG_ROBOT_USERNAME}" + "'" + """);
+
+    // Wait for the password input field to be available
+    await page.waitForSelector('#passwordInput');
+
+    // Type the password
+    await page.type('#passwordInput', """ + "'" + f"{SD_PERSONALESAG_ROBOT_PASSWORD}" + "'" + """);
+
+    // Click the submit button
+    await page.click('#submitButton');
+
+    // Log a message indicating the login was attempted
+    console.log("Login attempted");
+
+    // Wait for some time after selection
+    await page.waitForTimeout(1500); // Adjust the timeout as necessary
+
+        // Wait for the username input field to be available
+    await page.waitForSelector('#product-cf662da2-9d3c-0108-e043-0a10f6400108');
+    await page.goto('https://www.silkeborgdata.dk/sdpw/' ,{waitUntil: 'networkidle2' });
+
+    await page.waitForSelector('#tags');
+
+    // Type the text into the input field
+    await page.type('#tags', inputString);
+
+    try {
+        await page.waitForSelector('.ui-menu-item', { visible: true, timeout: 5000 });
+    } catch (error) {
+        console.log("No items found in dropdown menu");
+        return {
+            data: {
+            "success": false,
+            "msg": "No dropdown item found."
+            },
+            type: "application/json",
+        };
+    }
+
+    const dropdownItems = await page.$$('.ui-menu-item');
+    if (dropdownItems.length > 0) {
+        for (let i = 0; i < dropdownItems.length; i++) {
+            const dropdownText = await page.evaluate(el => el.innerText, dropdownItems[i]);
+            const dropdownItemSelector = 'li.ui-menu-item:nth-child(' + i+1 + ')';
+            await page.waitForTimeout(1500); // Adjust the timeout as necessary
+            await page.waitForSelector(dropdownItemSelector); // Ensure the item is visible
+
+            await page.waitForTimeout(1500); // Adjust the timeout as necessary
+
+            // Click the dropdown item using page.evaluate to avoid selection issues
+            await page.click(dropdownItemSelector)
+            console.log(`Dropdown item ${i + 1} clicked: ${dropdownText}`);
+
+
+            // Wait for some time after each click to ensure the page processes it
+            await page.waitForTimeout(1500); // Adjust the timeout as necessary
+            await page.goto('https://www.silkeborgdata.dk/sdpw/faces/esdh/psag/PersonalesagLoader.xhtml?from=frontpage', {waitUntil: 'networkidle2'});
+
+
+            page.waitForSelector('#sager')
+
+
+
+
+            var success = await page.evaluate(() => {
+
+            const elements = document.querySelectorAll("[id^='psagform']");
+
+            let found = false
+
+
+
+            elements.forEach((el) => {
+                if(el.innerHTML === "Personalesag"){
+                found = true
+                }
+                })
+
+                return found
+            })
+
+            const msg = success ? "Personalesag found." : "Did not find personalesag."
+
+            await page.close();
+
+            return {
+                data: {
+                    "success": success,
+                    "msg": msg
+                },
+                type: "application/json",
+                };
+            }
+
+    } else {
+        console.log("No dropdown item found.");
+        return {
+            data: {
+            "success": false,
+            "msg": "No dropdown item found."
+            },
+            type: "application/json",
+        };
+    }
+    };
+
+
+    """
+
+    response = requests.post(url, headers=headers, data=data, auth=HTTPBasicAuth(username=BROWSERLESS_CLIENT_ID,
+                                                                                 password=BROWSERLESS_CLIENT_SECRET))
+    logger.info(response.content)
     return response
