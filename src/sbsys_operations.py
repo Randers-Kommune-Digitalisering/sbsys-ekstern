@@ -152,7 +152,7 @@ class SBSYSOperations:
             sag_id = sag['Id']
             # Call the journalise_file_personalesag method with the JSON data
             json_data = {
-                "json": f'{{"SagID": {sag_id}, "OmfattetAfAktindsigt": true, "DokumentNavn": "E-recruttering - Ansættelsesdata - {upload_id}", "DokumentArt": {{"Id": 1}}}}'
+                "json": f'{{"SagID": {sag_id}, "OmfattetAfAktindsigt": true, "DokumentNavn": "E-rekruttering - Ansættelsesdata", "DokumentArt": {{"Id": 1}}}}'
                 # DokumentArt Id 1 = "Indgående" dokument art
             }
 
@@ -161,6 +161,8 @@ class SBSYSOperations:
 
             # Call the journalise_file_personalesag method and capture the response
             response = self.client.journalise_file_personalesag(json_data, files, delforloeb_id)
+
+            logger.info(f"journalise_file response: {response}")
 
             # Check if the response is received
             if response:
