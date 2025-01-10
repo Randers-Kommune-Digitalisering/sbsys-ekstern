@@ -20,7 +20,89 @@ from browserless import browserless_sd_personalesag_files, browserless_sd_person
 
 set_logging_configuration()
 
-health = HealthCheck()
+
+# ## Worker start ## #
+def worker_job():
+    logger = logging.getLogger('worker_thread')
+    logger.info("Worker started")
+
+    departments_by_level_3 = None
+    departments_by_level_3_updated = datetime.now()
+
+    while not worker_stop_event.is_set():
+        # Fetch the departments by level 3 every 12 hours
+        if not departments_by_level_3 or (datetime.now() - departments_by_level_3_updated).seconds > 43200:
+            departments_by_level_3 = group_by_level_3('9R')
+            departments_by_level_3_updated = datetime.now()
+        with db_client.get_session() as sess:
+            # Clean up database
+            old_files = db_client.get_stuck_signatur_file_uploads(sess)
+            if old_files:
+                logger.info(f"Cleaning up {len(old_files)} old files - setting status to failed")
+                for f in old_files:
+                    f.set_status(STATUS_CODE.FAILED, "File was not processed in time")
+
+            # Fetch the next file to process
+            upload_file = db_client.get_next_signatur_file_upload(sess)
+            if upload_file:
+
+                if not departments_by_level_3:
+                    logger.error("No departments found")
+                    upload_file.set_status(STATUS_CODE.FAILED, "No departments found")
+                    sess.commit()
+                else:
+                    logger.info(f"Processing file with id: {upload_file.id}")
+                    # times_to_try = 3
+                    # time_to_sleep = 5
+                    # i = 0
+
+                    # while i < times_to_try:
+                    sag = fetch_personalesag(upload_file.cpr, upload_file.employment, upload_file.institutionIdentifier, departments_by_level_3)
+                    if sag:
+                        logger.info(f"Found sag: {sag.get('Id', None)} - uploading file")
+                        if journalise_document(sag, upload_file):
+                            logger.info(f"File {upload_file.file_name} was uploaded successfully")
+                            upload_file.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
+                            # break
+                        else:
+                            logger.error(f"Failed to upload file {upload_file.file_name}")
+                            upload_file.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "Failed to upload file, try again")
+                    else:
+                        logger.error(f"No sag found for cpr: {upload_file.cpr} and employment: {upload_file.employment}")
+                        # if i < times_to_try - 1:
+                            # logger.info(f"Failed to find sag, try: {i+1}, will try again in {time_to_sleep} seconds")
+                        # else:
+                            # logger.info(f"Failed to find sag, try: {i+1}, will not try again")
+                        upload_file.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "No case found in SBSYS")
+                        # i += 1
+                        # time.sleep(time_to_sleep)
+            sess.commit()
+    logger.info("Worker stopped")
+
+
+worker = threading.Thread(target=worker_job)
+worker_stop_event = threading.Event()
+
+
+def stop_worker():
+    global worker, worker_stop_event
+    worker_stop_event.set()
+    worker.join()
+
+
+def shutdown_server(sig, frame):
+    stop_worker()
+    sys.exit(0)
+
+
+def is_worker_running():
+    global worker
+    return worker.is_alive(), 'worker is running' if worker.is_alive() else 'worker is not running'
+
+# ## Worker end ## #
+
+
+health = HealthCheck(checkers=[is_worker_running])
 ah = AuthorizationHelper(KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE)
 sbsys = SBSYSOperations()
 sd_client = SDClient(username=SD_USERNAME, password=SD_PASSWORD, url=SD_URL)
@@ -125,7 +207,7 @@ def sbsys_journaliser_ansattelse_fil_status():
         else:
             return generate_response("Missing id parameter", status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        print(f"Unexpected error: {e}")
+        logger.error(f"Unexpected error: {e}")
         return generate_response("An unexpected error occurred", status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -656,80 +738,6 @@ def compare_sd_and_sbsys_employment_place_by_level_3(sag, employment, level_3_de
             return sag
 
 # LEVEL 3 stuff END
-
-
-worker_stop_event = threading.Event()
-
-
-def worker_job():
-    logger = logging.getLogger('worker_thread')
-    logger.info("Worker started")
-
-    departments_by_level_3 = None
-    departments_by_level_3_updated = datetime.now()
-
-    while not worker_stop_event.is_set():
-        # Fetch the departments by level 3 every 12 hours
-        if not departments_by_level_3 or (datetime.now() - departments_by_level_3_updated).seconds > 43200:
-            departments_by_level_3 = group_by_level_3('9R')
-            departments_by_level_3_updated = datetime.now()
-        with db_client.get_session() as sess:
-            # Clean up database
-            old_files = db_client.get_stuck_signatur_file_uploads(sess)
-            if old_files:
-                for f in old_files:
-                    f.set_status(STATUS_CODE.FAILED, "File was not processed in time")
-
-            # Fetch the next file to process
-            upload_file = db_client.get_next_signatur_file_upload(sess)
-            if upload_file:
-
-                if not departments_by_level_3:
-                    logger.error("No departments found")
-                    upload_file.set_status(STATUS_CODE.FAILED, "No departments found")
-                    sess.commit()
-                else:
-                    logger.info(f"Processing file with id: {upload_file.id}")
-                    # times_to_try = 3
-                    # time_to_sleep = 5
-                    # i = 0
-
-                    # while i < times_to_try:
-                    sag = fetch_personalesag(upload_file.cpr, upload_file.employment, upload_file.institutionIdentifier, departments_by_level_3)
-                    if sag:
-                        logger.info(f"Found sag: {sag.get('Id', None)} - uploading file")
-                        if journalise_document(sag, upload_file):
-                            logger.info(f"File {upload_file.file_name} was uploaded successfully")
-                            upload_file.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
-                            # break
-                        else:
-                            logger.error(f"Failed to upload file {upload_file.file_name}")
-                            upload_file.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "Failed to upload file, try again")
-                    else:
-                        logger.error(f"No sag found for cpr: {upload_file.cpr} and employment: {upload_file.employment}")
-                        # if i < times_to_try - 1:
-                            # logger.info(f"Failed to find sag, try: {i+1}, will try again in {time_to_sleep} seconds")
-                        # else:
-                            # logger.info(f"Failed to find sag, try: {i+1}, will not try again")
-                        upload_file.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "No case found in SBSYS")
-                        # i += 1
-                        # time.sleep(time_to_sleep)
-            sess.commit()
-    logger.info("Worker stopped")
-
-
-worker = threading.Thread(target=worker_job)
-
-
-def stop_worker():
-    global worker, worker_stop_event
-    worker_stop_event.set()
-    worker.join()
-
-
-def shutdown_server(sig, frame):
-    stop_worker()
-    sys.exit(0)
 
 
 if __name__ == "__main__":

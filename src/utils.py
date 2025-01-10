@@ -147,7 +147,7 @@ def convert_filestring_to_bytes(file_string):
     try:
         # Decode base64 string
         decoded_bytes = base64.b64decode(file_string, validate=True)
-        
+
         # Check if the decoded bytes start with the PDF magic number
         if decoded_bytes.startswith(b'%PDF'):
             return decoded_bytes, None
@@ -160,10 +160,14 @@ def convert_filestring_to_bytes(file_string):
 
 
 def generate_response(message: str, http_code: int, upload=None, received_id=None):
+    msg = None
     if isinstance(upload, SignaturFileupload):
         status, message = upload.get_status()
-        return {"id": upload.get_id(), "status_code": status.value, "status_text": status.name, "message": message}, http_code
+        msg = {"id": upload.get_id(), "status_code": status.value, "status_text": status.name, "message": message} 
     elif received_id:
-        return {"id": received_id, "status_code": STATUS_CODE.FAILED.value, "status_text": STATUS_CODE.FAILED.name, "message": message}, http_code
+        msg = {"id": received_id, "status_code": STATUS_CODE.FAILED.value, "status_text": STATUS_CODE.FAILED.name, "message": message}
     else:
-        return {"id": None, "status_code": STATUS_CODE.FAILED.value, "status_text": STATUS_CODE.FAILED.name, "message": message}, http_code
+        msg = {"id": None, "status_code": STATUS_CODE.FAILED.value, "status_text": STATUS_CODE.FAILED.name, "message": message}
+
+    logger.info(f"Response: {msg}")
+    return msg, http_code
