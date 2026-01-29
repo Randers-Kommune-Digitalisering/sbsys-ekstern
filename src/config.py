@@ -28,6 +28,7 @@ DB_HOST = os.environ["DB_HOST"].strip()
 DB_PORT = os.environ["DB_PORT"].strip()
 
 # Browserless
+BROWSERLESS_URL = os.environ["BROWSERLESS_URL"].strip().rstrip('/')
 BROWSERLESS_CLIENT_ID = os.environ["BROWSERLESS_CLIENT_ID"].strip()
 BROWSERLESS_CLIENT_SECRET = os.environ["BROWSERLESS_CLIENT_SECRET"].strip()
 

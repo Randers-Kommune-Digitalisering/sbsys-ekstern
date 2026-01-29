@@ -2,7 +2,7 @@ import logging
 import requests
 from requests.auth import HTTPBasicAuth
 from config import BROWSERLESS_CLIENT_ID, BROWSERLESS_CLIENT_SECRET, SD_PERSONALESAG_ROBOT_USERNAME, \
-    SD_PERSONALESAG_ROBOT_PASSWORD
+    SD_PERSONALESAG_ROBOT_PASSWORD, BROWSERLESS_URL
 
 
 logger = logging.getLogger(__name__)
@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 def browserless_sd_personalesag_files(input_strings):
     # Input strings should be a list of strings with cpr and employmentidentifier e.g. ['0102039999 01010']
-    url = "https://browserless.prototypes.randers.dk/function"
+    # url = "https://browserless.prototypes.randers.dk/function"
+    url = BROWSERLESS_URL + "/function"
     headers = {
         "Content-Type": "application/javascript",
     }
