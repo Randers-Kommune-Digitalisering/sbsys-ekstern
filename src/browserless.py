@@ -212,7 +212,8 @@ if (dropdownItems.length > 0) {
 
 
 def browserless_sd_personalesag_exist(input_string):
-    url = "https://browserless.prototypes.randers.dk/function"
+    # url = "https://browserless.prototypes.randers.dk/function"
+    url = BROWSERLESS_URL + "/function"
     headers = {"Content-Type": "application/javascript", }
 
     data = """
