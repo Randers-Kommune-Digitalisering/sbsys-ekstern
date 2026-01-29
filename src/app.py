@@ -12,7 +12,7 @@ import http_status as status
 from sbsys_operations import SBSYSOperations
 from openid_integration import AuthorizationHelper
 from database import DatabaseClient, Base, SignaturFileupload  # , FileObject
-from config import DEBUG, KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE, DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER, SD_URL, SD_USERNAME, SD_PASSWORD
+from config import DEBUG, KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE, DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER, SD_URL, SD_USERNAME, SD_PASSWORD, SD_PERSONALESAG_ROBOT_USERNAME
 from request_validation import is_cpr, is_employment, is_institution, is_pdf  # , is_timestamp
 from utils import set_logging_configuration, generate_response, STATUS_CODE  # , SignaturFileupload
 from sd.sd_client import SDClient
@@ -115,6 +115,8 @@ Base.metadata.create_all(db_client.get_engine())
 
 
 def create_app():
+
+    logger.info("SD robot bruger: " + SD_PERSONALESAG_ROBOT_USERNAME)
 
     app = Flask(__name__)
     app.add_url_rule("/healthz", "healthcheck", view_func=lambda: health.run())
