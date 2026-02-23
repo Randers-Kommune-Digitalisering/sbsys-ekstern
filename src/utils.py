@@ -109,6 +109,8 @@ class APIClient:
 # Samling af sbsys requests
 class SBSYSClient:
     def __init__(self):
+        print(SBSYS_CLIENT_ID)
+        print(SBSYS_USERNAME)
         self.api_client = APIClient(SBSYS_URL, SBSIP_URL, SBSYS_CLIENT_ID, SBSYS_CLIENT_SECRET, SBSYS_USERNAME, SBSYS_PASSWORD)
 
     # søg efter sager
