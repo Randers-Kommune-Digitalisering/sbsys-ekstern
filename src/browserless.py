@@ -314,10 +314,10 @@ def browserless_sd_personalesag_exist(input_string):
         for (let i = 0; i < dropdownItems.length; i++) {
             const dropdownText = await page.evaluate(el => el.innerText, dropdownItems[i]);
             const dropdownItemSelector = 'li.ui-menu-item:nth-child(' + i+1 + ')';
-            await page.waitForTimeout(1500); // Adjust the timeout as necessary
+            await page.waitForTimeout(2500); // Adjust the timeout as necessary
             await page.waitForSelector(dropdownItemSelector); // Ensure the item is visible
 
-            await page.waitForTimeout(1500); // Adjust the timeout as necessary
+            await page.waitForTimeout(2500); // Adjust the timeout as necessary
 
             // Click the dropdown item using page.evaluate to avoid selection issues
             await page.click(dropdownItemSelector)
@@ -325,7 +325,7 @@ def browserless_sd_personalesag_exist(input_string):
 
 
             // Wait for some time after each click to ensure the page processes it
-            await page.waitForTimeout(1500); // Adjust the timeout as necessary
+            await page.waitForTimeout(2500); // Adjust the timeout as necessary
             await page.goto('https://www.silkeborgdata.dk/sdpw/faces/esdh/psag/PersonalesagLoader.xhtml?from=frontpage', {waitUntil: 'networkidle2'});
 
 
