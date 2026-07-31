@@ -1,6 +1,6 @@
 from flask import Flask, request
 from healthcheck import HealthCheck
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import sys
 import atexit
@@ -16,8 +16,7 @@ from config import DEBUG, KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE, DB_HO
 from request_validation import is_cpr, is_employment, is_institution, is_pdf  # , is_timestamp
 from utils import set_logging_configuration, generate_response, STATUS_CODE  # , SignaturFileupload
 from sd.sd_client import SDClient
-from browserless import browserless_sd_personalesag_files, browserless_sd_personalesag_exist
-
+from rpa import playwright_sd_personalesag_exist
 set_logging_configuration()
 
 
@@ -139,7 +138,7 @@ def sbsys_journaliser_ansattelse_fil():
 
         upload = None
 
-        if not id and not all([cpr,employment, file, institutionIdentifier]):
+        if not id and not all([cpr, employment, file, institutionIdentifier]):
             return generate_response("Missing form-data parameter, must contain cpr, institution, employment and file", http_code=status.HTTP_400_BAD_REQUEST)
         else:
             with db_client.get_session() as session:
@@ -499,27 +498,43 @@ def filter_employment_by_department(employment_list, department_code_list, sag_i
     return filtered_employment
 
 
-def fetch_sd_employment_files(input_strings: list):
-    try:
-        # Make the request and get the response
-        response = browserless_sd_personalesag_files(input_strings)
+# def fetch_sd_employment_files(input_strings: list):
+#     try:
+#         # Make the request and get the response
+#         response = browserless_sd_personalesag_files(input_strings)
 
-        # Check if the response status code is 200
-        if response.status_code == 200:
-            # Return the content if the status is 200
-            return response.json()  # Assuming the content is JSON
-        else:
-            # Handle the error case (you can raise an exception or return an error message)
-            raise Exception(f"Request failed with status code: {response.status_code}")
-    except Exception as e:
-        logger.error(f"fetch_sd_employment_files error: {e}")
-        return None
+#         # Check if the response status code is 200
+#         if response.status_code == 200:
+#             # Return the content if the status is 200
+#             return response.json()  # Assuming the content is JSON
+#         else:
+#             # Handle the error case (you can raise an exception or return an error message)
+#             raise Exception(f"Request failed with status code: {response.status_code}")
+#     except Exception as e:
+#         logger.error(f"fetch_sd_employment_files error: {e}")
+#         return None
+
+
+# def check_sd_has_personalesag(input_string: str):
+#     try:
+#         # Make the request and get the response
+#         response = browserless_sd_personalesag_exist(input_string)
+
+#         # Check if the response status code is 200
+#         if response.status_code == 200:
+#             # Return the content if the status is 200
+#             return response.json()  # Assuming the content is JSON
+#         else:
+#             logger.error(f"Request failed with status code: {response.status_code} and message: {response.content}")
+#     except Exception as e:
+#         logger.error(f"fetch_sd_employment_files error: {e}")
+#         return None
 
 
 def check_sd_has_personalesag(input_string: str):
     try:
         # Make the request and get the response
-        response = browserless_sd_personalesag_exist(input_string)
+        response = playwright_sd_personalesag_exist(input_string)
 
         # Check if the response status code is 200
         if response.status_code == 200:
