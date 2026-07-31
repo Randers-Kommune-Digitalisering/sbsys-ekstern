@@ -1,4 +1,6 @@
 import logging
+import tempfile
+import time
 import requests
 from requests.auth import HTTPBasicAuth
 from config import BROWSERLESS_CLIENT_ID, BROWSERLESS_CLIENT_SECRET, SD_PERSONALESAG_ROBOT_USERNAME, \
@@ -6,6 +8,17 @@ from config import BROWSERLESS_CLIENT_ID, BROWSERLESS_CLIENT_SECRET, SD_PERSONAL
 
 
 logger = logging.getLogger(__name__)
+
+
+def _capture_playwright_failure_screenshot(page, prefix):
+    screenshot_path = f"{tempfile.gettempdir()}\\{prefix}-{int(time.time() * 1000)}.png"
+    try:
+        page.screenshot(path=screenshot_path, full_page=True)
+        logger.error("Playwright failure screenshot saved to %s", screenshot_path)
+    except Exception as exc:
+        logger.error("Failed to save Playwright screenshot: %s", exc)
+        screenshot_path = None
+    return screenshot_path
 
 
 def browserless_sd_personalesag_files(input_strings):
@@ -351,6 +364,9 @@ def playwright_sd_personalesag_files(input_strings, headless=True):
                 },
                 'type': 'application/json',
             }
+        except Exception:
+            _capture_playwright_failure_screenshot(page, 'playwright-sd-personalesag-files-failure')
+            raise
         finally:
             context.close()
             browser.close()
@@ -426,20 +442,22 @@ def playwright_sd_personalesag_exist(input_string, headless=True):
             try:
                 page.wait_for_selector('.ui-menu-item', state='visible', timeout=5000)
             except PlaywrightTimeoutError:
+                screenshot_path = _capture_playwright_failure_screenshot(page, 'playwright-sd-personalesag-exist-failure')
                 return {
                     'data': {
                         'success': False,
-                        'msg': 'No dropdown item found.',
+                        'msg': f"No dropdown item found. Screenshot: {screenshot_path}" if screenshot_path else 'No dropdown item found.',
                     },
                     'type': 'application/json',
                 }
 
             dropdown_count = page.locator('.ui-menu-item').count()
             if dropdown_count == 0:
+                screenshot_path = _capture_playwright_failure_screenshot(page, 'playwright-sd-personalesag-exist-failure')
                 return {
                     'data': {
                         'success': False,
-                        'msg': 'No dropdown item found.',
+                        'msg': f"No dropdown item found. Screenshot: {screenshot_path}" if screenshot_path else 'No dropdown item found.',
                     },
                     'type': 'application/json',
                 }
@@ -459,36 +477,73 @@ def playwright_sd_personalesag_exist(input_string, headless=True):
                 )
                 page.wait_for_selector('#sager')
 
-                success = page.evaluate(
+                page_state = page.evaluate(
                     """
                     () => {
-                        const elements = document.querySelectorAll("[id^='psagform']");
-                        let found = false;
-                        elements.forEach((el) => {
-                            if (el.innerHTML === 'Personalesag') {
-                                found = true;
-                            }
-                        });
-                        return found;
+                        const collectTexts = (selector) => Array.from(document.querySelectorAll(selector))
+                            .map((el) => (el.textContent || '').trim())
+                            .filter(Boolean);
+
+                        const errorSelectors = [
+                            '.ui-messages-error',
+                            '.ui-messages-error-summary',
+                            '.ui-message-error',
+                            '.ui-message-error-summary',
+                            '[class*="error"]',
+                        ];
+
+                        const errorMessages = [...new Set(
+                            errorSelectors.flatMap((selector) => collectTexts(selector))
+                        )];
+
+                        const personalesagFound = Array.from(document.querySelectorAll("[id^='psagform']"))
+                            .some((el) => (el.textContent || '').trim() === 'Personalesag');
+
+                        const bodyText = document.body ? document.body.innerText : '';
+                        const genericErrorMatch = bodyText.match(
+                            /(der opstod en fejl[^\n]*|adgang nægtet[^\n]*|ingen adgang[^\n]*|unexpected error[^\n]*)/i
+                        );
+
+                        return {
+                            personalesagFound,
+                            errorMessages,
+                            genericError: genericErrorMatch ? genericErrorMatch[0].trim() : null,
+                        };
                     }
                     """
                 )
 
+                success = page_state['personalesagFound'] and not page_state['errorMessages'] and not page_state['genericError']
+                failure_msg = 'Did not find personalesag.'
+                if page_state['errorMessages']:
+                    failure_msg = page_state['errorMessages'][0]
+                elif page_state['genericError']:
+                    failure_msg = page_state['genericError']
+                screenshot_path = None
+                if not success:
+                    screenshot_path = _capture_playwright_failure_screenshot(page, 'playwright-sd-personalesag-exist-failure')
+
                 return {
                     'data': {
                         'success': success,
-                        'msg': 'Personalesag found.' if success else 'Did not find personalesag.',
+                        'msg': 'Personalesag found.' if success else (
+                            f"{failure_msg} Screenshot: {screenshot_path}" if screenshot_path else failure_msg
+                        ),
                     },
                     'type': 'application/json',
                 }
 
+            screenshot_path = _capture_playwright_failure_screenshot(page, 'playwright-sd-personalesag-exist-failure')
             return {
                 'data': {
                     'success': False,
-                    'msg': 'No dropdown item found.',
+                    'msg': f"No dropdown item found. Screenshot: {screenshot_path}" if screenshot_path else 'No dropdown item found.',
                 },
                 'type': 'application/json',
             }
+        except Exception:
+            _capture_playwright_failure_screenshot(page, 'playwright-sd-personalesag-exist-failure')
+            raise
         finally:
             context.close()
             browser.close()
