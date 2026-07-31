@@ -243,8 +243,12 @@ def playwright_sd_personalesag_files(input_strings, headless=True):
         )
 
     def process_input_string(page, input_string, all_results):
-        page.wait_for_selector('#tags')
-        page.fill('#tags', input_string)
+        tags_input = page.locator('#tags')
+        tags_input.wait_for()
+        tags_input.click()
+        tags_input.fill('')
+        tags_input.type(input_string, delay=100)
+        page.wait_for_timeout(500)
 
         try:
             page.wait_for_selector('.ui-menu-item', state='visible', timeout=5000)
@@ -412,8 +416,12 @@ def playwright_sd_personalesag_exist(input_string, headless=True):
             )
 
             page.goto('https://www.silkeborgdata.dk/sdpw/', wait_until='networkidle')
-            page.wait_for_selector('#tags')
-            page.fill('#tags', input_string)
+            tags_input = page.locator('#tags')
+            tags_input.wait_for()
+            tags_input.click()
+            tags_input.fill('')
+            tags_input.type(input_string, delay=100)
+            page.wait_for_timeout(500)
 
             try:
                 page.wait_for_selector('.ui-menu-item', state='visible', timeout=5000)
@@ -667,4 +675,4 @@ if __name__ == "__main__":
     print(f"Input strings: {input_strings}")
     # response = browserless_sd_personalesag_files([input_strings])
     response = playwright_sd_personalesag_files([input_strings], headless=False)
-    print(response.content)
+    print(response)
