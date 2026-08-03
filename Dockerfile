@@ -1,19 +1,15 @@
-FROM python:3.11-slim
+FROM mcr.microsoft.com/playwright/python:v1.62.0-jammy
 
 ENV APP_HOME=/app
 ENV APP_USER=non-root
 
-RUN addgroup $APP_USER && \
-    adduser $APP_USER -D -G $APP_USER
-
-RUN apt-get update
-RUN apt-get install -y musl-dev gcc libpq-dev postgresql-dev python3-dev
+RUN groupadd $APP_USER && \
+    useradd -m -g $APP_USER -d $APP_HOME $APP_USER
 
 COPY . $APP_HOME
 WORKDIR $APP_HOME
 
-RUN pip install -r requirements.txt
-RUN playwright install --with-deps chromium
+RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 8080
 

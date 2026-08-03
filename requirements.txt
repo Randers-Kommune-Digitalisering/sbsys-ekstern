@@ -7,3 +7,4 @@ python-dotenv
 py-healthcheck
 SQLAlchemy
 xmltodict
+playwright==1.62.0
