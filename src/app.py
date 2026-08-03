@@ -29,53 +29,53 @@ def worker_job():
     departments_by_level_3_updated = datetime.now()
 
     while not worker_stop_event.is_set():
-        # Fetch the departments by level 3 every 12 hours
-        if not departments_by_level_3 or (datetime.now() - departments_by_level_3_updated).seconds > 43200:
-            departments_by_level_3 = group_by_level_3('9R')
-            departments_by_level_3_updated = datetime.now()
-        with db_client.get_session() as sess:
-            # Clean up database
-            old_files = db_client.get_stuck_signatur_file_uploads(sess)
-            if old_files:
-                logger.info(f"Cleaning up {len(old_files)} old files - setting status to failed")
-                for f in old_files:
-                    f.set_status(STATUS_CODE.FAILED, "File was not processed in time")
+        try:
+            # Fetch the departments by level 3 every 12 hours
+            if not departments_by_level_3 or (datetime.now() - departments_by_level_3_updated).seconds > 43200:
+                departments_by_level_3 = group_by_level_3('9R')
+                departments_by_level_3_updated = datetime.now()
 
-            # Fetch the next file to process
-            upload_file = db_client.get_next_signatur_file_upload(sess)
-            if upload_file:
+            with db_client.get_session() as sess:
+                # Clean up database
+                old_files = db_client.get_stuck_signatur_file_uploads(sess)
+                if old_files:
+                    logger.info(f"Cleaning up {len(old_files)} old files - setting status to failed")
+                    for f in old_files:
+                        f.set_status(STATUS_CODE.FAILED, "File was not processed in time")
 
-                if not departments_by_level_3:
-                    logger.error("No departments found")
-                    upload_file.set_status(STATUS_CODE.FAILED, "No departments found")
-                    sess.commit()
-                else:
-                    logger.info(f"Processing file with id: {upload_file.id}")
-                    # times_to_try = 3
-                    # time_to_sleep = 5
-                    # i = 0
-
-                    # while i < times_to_try:
-                    sag = fetch_personalesag(upload_file.cpr, upload_file.employment, upload_file.institutionIdentifier, departments_by_level_3)
-                    if sag:
-                        logger.info(f"Found sag: {sag.get('Id', None)} - uploading file")
-                        if journalise_document(sag, upload_file):
-                            logger.info(f"File {upload_file.file_name} was uploaded successfully")
-                            upload_file.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
-                            # break
+                # Fetch the next file to process
+                upload_file = db_client.get_next_signatur_file_upload(sess)
+                if upload_file:
+                    try:
+                        if not departments_by_level_3:
+                            logger.error("No departments found")
+                            upload_file.set_status(STATUS_CODE.FAILED, "No departments found")
+                            sess.commit()
                         else:
-                            logger.error(f"Failed to upload file {upload_file.file_name}")
-                            upload_file.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "Failed to upload file, try again")
-                    else:
-                        logger.error(f"No sag found for cpr: {upload_file.cpr} and employment: {upload_file.employment}")
-                        # if i < times_to_try - 1:
-                            # logger.info(f"Failed to find sag, try: {i+1}, will try again in {time_to_sleep} seconds")
-                        # else:
-                            # logger.info(f"Failed to find sag, try: {i+1}, will not try again")
-                        upload_file.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "No case found in SBSYS")
-                        # i += 1
-                        # time.sleep(time_to_sleep)
-            sess.commit()
+                            logger.info(f"Processing file with id: {upload_file.id}")
+                            sag = fetch_personalesag(upload_file.cpr, upload_file.employment, upload_file.institutionIdentifier, departments_by_level_3)
+                            if sag:
+                                logger.info(f"Found sag: {sag.get('Id', None)} - uploading file")
+                                if journalise_document(sag, upload_file):
+                                    logger.info(f"File {upload_file.file_name} was uploaded successfully")
+                                    upload_file.set_status(STATUS_CODE.SUCCESS, "File was uploaded successfully")
+                                else:
+                                    logger.error(f"Failed to upload file {upload_file.file_name}")
+                                    upload_file.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "Failed to upload file, try again")
+                            else:
+                                logger.error(f"No sag found for cpr: {upload_file.cpr} and employment: {upload_file.employment}")
+                                upload_file.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "No case found in SBSYS")
+                    except Exception as e:
+                        logger.error(f"Failed while processing upload id {upload_file.id}: {e}")
+                        upload_file.set_status(STATUS_CODE.FAILED_TRY_AGAIN, "Processing failed unexpectedly, try again")
+                    finally:
+                        sess.commit()
+                else:
+                    sess.commit()
+        except Exception as e:
+            # Keep worker alive even if one loop iteration fails.
+            logger.error(f"Worker loop failed: {e}")
+            time.sleep(1)
     logger.info("Worker stopped")
 
 
@@ -533,18 +533,15 @@ def filter_employment_by_department(employment_list, department_code_list, sag_i
 
 def check_sd_has_personalesag(input_string: str):
     try:
-        # Make the request and get the response
         response = playwright_sd_personalesag_exist(input_string)
+        if isinstance(response, dict):
+            return response.get('data', {})
 
-        # Check if the response status code is 200
-        if response.status_code == 200:
-            # Return the content if the status is 200
-            return response.json()  # Assuming the content is JSON
-        else:
-            logger.error(f"Request failed with status code: {response.status_code} and message: {response.content}")
+        logger.error("Unexpected response type from playwright_sd_personalesag_exist")
+        return {'success': False, 'msg': 'Unexpected response type from Playwright integration'}
     except Exception as e:
         logger.error(f"fetch_sd_employment_files error: {e}")
-        return None
+        return {'success': False, 'msg': 'Playwright integration failed'}
 
 
 class JournalisationError(Exception):
