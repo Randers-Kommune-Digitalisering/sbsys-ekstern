@@ -1,22 +1,9 @@
 import logging
-import tempfile
-import time
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 from config import SD_PERSONALESAG_ROBOT_USERNAME, SD_PERSONALESAG_ROBOT_PASSWORD
 
 
 logger = logging.getLogger(__name__)
-
-
-def _capture_playwright_failure_screenshot(page, prefix):
-    screenshot_path = f"{tempfile.gettempdir()}\\{prefix}-{int(time.time() * 1000)}.png"
-    try:
-        page.screenshot(path=screenshot_path, full_page=True)
-        logger.error("Playwright failure screenshot saved to %s", screenshot_path)
-    except Exception as exc:
-        logger.error("Failed to save Playwright screenshot: %s", exc)
-        screenshot_path = None
-    return screenshot_path
 
 
 def playwright_sd_personalesag_files(input_strings, headless=True):
@@ -156,7 +143,6 @@ def playwright_sd_personalesag_files(input_strings, headless=True):
                 'type': 'application/json',
             }
         except Exception:
-            _capture_playwright_failure_screenshot(page, 'playwright-sd-personalesag-files-failure')
             raise
         finally:
             context.close()
@@ -233,22 +219,20 @@ def playwright_sd_personalesag_exist(input_string, headless=True):
             try:
                 page.wait_for_selector('.ui-menu-item', state='visible', timeout=5000)
             except PlaywrightTimeoutError:
-                screenshot_path = _capture_playwright_failure_screenshot(page, 'playwright-sd-personalesag-exist-failure')
                 return {
                     'data': {
                         'success': False,
-                        'msg': f"No dropdown item found. Screenshot: {screenshot_path}" if screenshot_path else 'No dropdown item found.',
+                        'msg': 'No dropdown item found.',
                     },
                     'type': 'application/json',
                 }
 
             dropdown_count = page.locator('.ui-menu-item').count()
             if dropdown_count == 0:
-                screenshot_path = _capture_playwright_failure_screenshot(page, 'playwright-sd-personalesag-exist-failure')
                 return {
                     'data': {
                         'success': False,
-                        'msg': f"No dropdown item found. Screenshot: {screenshot_path}" if screenshot_path else 'No dropdown item found.',
+                        'msg': 'No dropdown item found.',
                     },
                     'type': 'application/json',
                 }
@@ -310,30 +294,23 @@ def playwright_sd_personalesag_exist(input_string, headless=True):
                     failure_msg = page_state['errorMessages'][0]
                 elif page_state['genericError']:
                     failure_msg = page_state['genericError']
-                screenshot_path = None
-                if not success:
-                    screenshot_path = _capture_playwright_failure_screenshot(page, 'playwright-sd-personalesag-exist-failure')
 
                 return {
                     'data': {
                         'success': success,
-                        'msg': 'Personalesag found.' if success else (
-                            f"{failure_msg} Screenshot: {screenshot_path}" if screenshot_path else failure_msg
-                        ),
+                        'msg': 'Personalesag found.' if success else failure_msg,
                     },
                     'type': 'application/json',
                 }
 
-            screenshot_path = _capture_playwright_failure_screenshot(page, 'playwright-sd-personalesag-exist-failure')
             return {
                 'data': {
                     'success': False,
-                    'msg': f"No dropdown item found. Screenshot: {screenshot_path}" if screenshot_path else 'No dropdown item found.',
+                    'msg': 'No dropdown item found.',
                 },
                 'type': 'application/json',
             }
         except Exception:
-            _capture_playwright_failure_screenshot(page, 'playwright-sd-personalesag-exist-failure')
             raise
         finally:
             context.close()
