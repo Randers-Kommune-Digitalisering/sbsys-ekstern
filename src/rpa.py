@@ -44,7 +44,7 @@ def playwright_sd_personalesag_files(input_strings, headless=True):
         try:
             page.wait_for_selector('.ui-menu-item', state='visible', timeout=5000)
         except PlaywrightTimeoutError:
-            logger.info("No items found in dropdown menu for input: %s", input_string)
+            logger.info("No items found in dropdown menu for provided input string")
             return
 
         dropdown_count = page.locator('.ui-menu-item').count()
