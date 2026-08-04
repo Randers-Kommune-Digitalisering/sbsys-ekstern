@@ -79,12 +79,25 @@ def worker_job():
     logger.info("Worker stopped")
 
 
-worker = threading.Thread(target=worker_job)
+worker = threading.Thread(target=worker_job, daemon=True)
 worker_stop_event = threading.Event()
 
 
+def start_worker():
+    global worker
+    if worker.is_alive():
+        return
+
+    # Ensure a fresh thread object before (re)starting.
+    worker_stop_event.clear()
+    worker = threading.Thread(target=worker_job, daemon=True)
+    worker.start()
+
+
 def stop_worker():
-    global worker, worker_stop_event
+    if not worker.is_alive():
+        return
+
     worker_stop_event.set()
     worker.join()
 
@@ -95,7 +108,6 @@ def shutdown_server(sig, frame):
 
 
 def is_worker_running():
-    global worker
     return worker.is_alive(), 'worker is running' if worker.is_alive() else 'worker is not running'
 
 # ## Worker end ## #
@@ -119,6 +131,8 @@ def create_app():
 
     app = Flask(__name__)
     app.add_url_rule("/healthz", "healthcheck", view_func=lambda: health.run())
+    start_worker()
+    atexit.register(stop_worker)
     return app
 
 
@@ -755,7 +769,6 @@ def compare_sd_and_sbsys_employment_place_by_level_3(sag, employment, level_3_de
 
 
 if __name__ == "__main__":
-    worker.start()
-    atexit.register(stop_worker)
+    start_worker()
     signal.signal(signal.SIGINT, shutdown_server)
     app.run(debug=DEBUG, host='0.0.0.0', port=8080)
