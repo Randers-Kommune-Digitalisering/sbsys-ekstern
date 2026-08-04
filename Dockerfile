@@ -17,4 +17,4 @@ EXPOSE 8080
 USER $APP_USER
 
 ENTRYPOINT ["sh", "-c"]
-CMD ["gunicorn --bind 0.0.0.0:${PORT:-8080} main:app"]
+CMD ["gunicorn --bind 0.0.0.0:${PORT:-8080} app:app"]
