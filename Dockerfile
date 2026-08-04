@@ -1,18 +1,15 @@
-FROM python:3.11-alpine
+FROM mcr.microsoft.com/playwright/python:v1.62.0-jammy
 
 ENV APP_HOME=/app
 ENV APP_USER=non-root
 
-RUN addgroup $APP_USER && \
-    adduser $APP_USER -D -G $APP_USER
-
-RUN apk update
-RUN apk add musl-dev gcc libpq-dev postgresql-dev python3-dev
+RUN groupadd $APP_USER && \
+    useradd -m -g $APP_USER -d $APP_HOME $APP_USER
 
 COPY . $APP_HOME
 WORKDIR $APP_HOME
 
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 8080
 
