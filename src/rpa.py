@@ -272,7 +272,7 @@ def playwright_sd_personalesag_exist(input_string, headless=True):
 
                         const bodyText = document.body ? document.body.innerText : '';
                         const genericErrorMatch = bodyText.match(
-                            /(der opstod en fejl[^\n]*|adgang nægtet[^\n]*|ingen adgang[^\n]*|unexpected error[^\n]*)/i
+                            /(der opstod en fejl[^\\n]*|adgang nægtet[^\\n]*|ingen adgang[^\\n]*|unexpected error[^\\n]*)/i
                         );
 
                         return {

@@ -17,6 +17,8 @@ from request_validation import is_cpr, is_employment, is_institution, is_pdf  # 
 from utils import set_logging_configuration, generate_response, STATUS_CODE  # , SignaturFileupload
 from sd.sd_client import SDClient
 from rpa import playwright_sd_personalesag_exist
+
+
 set_logging_configuration()
 
 
@@ -285,6 +287,10 @@ def fetch_personalesag(cpr, employment_identifier, institution_identifier, level
 
 
 def find_personalesag_by_sd_employment(cpr: str, employment_identifier: str, inst_code: str, level_3_departments: dict):
+    if not cpr or not cpr.strip():
+        logger.error("find_personalesag_by_sd_employment received empty cpr")
+        return None
+
     # Fetch SD employment
     employment = sd_client.GetEmployment20111201(cpr=cpr, employment_identifier=employment_identifier, inst_code=inst_code)
     if not employment:
