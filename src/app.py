@@ -13,7 +13,7 @@ from sbsys_operations import SBSYSOperations
 from openid_integration import AuthorizationHelper
 from database import DatabaseClient, Base, SignaturFileupload  # , FileObject
 from config import DEBUG, KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_AUDIENCE, DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER, SD_URL, SD_USERNAME, SD_PASSWORD, SD_PERSONALESAG_ROBOT_USERNAME
-from request_validation import is_cpr, is_employment, is_institution, is_pdf  # , is_timestamp
+from request_validation import is_cpr, is_institution, is_pdf  # , is_timestamp
 from utils import set_logging_configuration, generate_response, STATUS_CODE  # , SignaturFileupload
 from sd.sd_client import SDClient
 from rpa import playwright_sd_personalesag_exist
@@ -180,12 +180,9 @@ def sbsys_journaliser_ansattelse_fil():
                 
                 if not is_cpr(cpr):
                     return generate_response("Not a valid cpr number. It must be digits in either 'ddmmyyxxxx' or 'ddmmyy-xxxx' format", status.HTTP_400_BAD_REQUEST)
-
-                if not is_employment(employment):
-                    return generate_response("Employment is not a five digit integer.", status.HTTP_400_BAD_REQUEST)
                 
                 if not is_institution(institutionIdentifier):
-                    return generate_response("Not a valid PDF file", status.HTTP_400_BAD_REQUEST)
+                    return generate_response("Not a valid institution identifier. It should be a two-character string.", status.HTTP_400_BAD_REQUEST)
 
                 if not is_pdf(file):
                     return generate_response("Not a valid PDF file", status.HTTP_400_BAD_REQUEST)
